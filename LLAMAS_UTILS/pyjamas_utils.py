@@ -5,9 +5,9 @@ aperture_innersky = 3
 aperture_outersky = 4.5
 detector = np.array(['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B'])
 ulines = [4340.472, 4101.734, 3970.075, 3889.064, 3835.397]
-uwid   = [45,       45,       30,       25,       25]
-glines = [4861.35]
-gwid   = [45]
+uwid   = [45,       45,       30,       25,       15]
+glines = [6562.79,  4861.35]
+gwid   = [60,       45]
 rlines = []
 rwid   = []
 # rlines = [9087]
@@ -15,6 +15,7 @@ rwid   = []
 
 rlines = []
 rwid = []
+
 
 def get_fiber(whitelight):
     aper = []
@@ -121,6 +122,7 @@ def extract_fiber(exobj, LUT, aper):
         
     
 def extract_aper(exobj, LUT, aper):
+    import matplotlib.pyplot as plt
     
     # Columns: bench, fiber, xpos, ypos
     fibermap = np.genfromtxt(LUT, delimiter='|', dtype=None, autostrip=True,
@@ -128,62 +130,102 @@ def extract_aper(exobj, LUT, aper):
     xpos = fibermap[:,2].astype('float')
     ypos = fibermap[:,3].astype('float') 
     
-    for i in range(3):
+    spectra = []
+    fig, ax = plt.subplots(nrows=3, figsize=(12,7))
+    for i, color in enumerate(['red', 'green', 'blue']):
         dist = (xpos-aper[i][0])**2 + (ypos-aper[i][1])**2
+        
+        aper_arr = []
+        w_arr = []
+        inds = np.nonzero(dist < aperture_radius)
+        bench, fiber = fibermap[inds][:,:2].T
+        for j in range(len(bench)):
+            hduidx = np.nonzero(detector == bench[j])[0][0]*3 + i
+            counts = exobj['extractions'][hduidx].counts
+            if i == 2:
+                counts = np.flipud(counts)
+                
+            counts = counts[int(fiber[j])]
+            aper_arr.append(counts)
+            w_arr.append(np.nansum(counts))
+        aper_arr = np.array(aper_arr)
+        w_arr = np.array(w_arr)
+        w_arr = w_arr / np.sum(w_arr)
+        w_arr = np.repeat(np.expand_dims(w_arr, 1), 2048, axis=1)
+        
+        weighted_sum = np.nansum(aper_arr * w_arr, axis=0)  # Weighted sum
+        normalization = np.nansum(w_arr * ~np.isnan(aper_arr), axis=0)  # Sum of valid weights
+        
+        avg_counts = weighted_sum / normalization  # Final weighted mean        
+        # avg_counts = np.nanmean(aper_arr * w_arr, axis=0)
+        
+        annulus_arr = []
+        inds = np.nonzero( (dist<aperture_outersky) *\
+                           (dist>aperture_innersky))
+        bench, fiber = fibermap[inds][:,:2].T
+        for j in range(len(bench)):
+            hduidx = np.nonzero(detector == bench[j])[0][0]*3 + i
+            counts = exobj['extractions'][hduidx].counts
+            if i == 2:
+                counts = np.flipud(counts)
+            counts = counts[int(fiber[j])]
+            annulus_arr.append(counts)
+        annulus_arr = np.array(annulus_arr)
+        sky_counts = np.nanmedian(annulus_arr, axis=0)
+        
+        skysub_counts = avg_counts - sky_counts
+        spectra.append(skysub_counts)
+        
+        ax[i].plot(avg_counts, c=color, label='Aperture science')
+        ax[i].plot(sky_counts, c='k', label='Annulus sky')
+        ax[i].plot(skysub_counts, c='dark'+color, label='Sky-subtracted science')
+        ax[i].set_ylabel('Counts')
+        ax[i].set_xlabel('Pixel')
+        ax[i].legend()
+        
+        
+        
+    return spectra
+        
     # inds = np.argsort(dist)
     # rbench, rfiber = fibermap[inds[0]][:2]      
     
-    
-def est_continuum(wave, flux):
+def est_continuum(wave, flux, bins=100):
     from scipy.interpolate import interp1d
     from scipy.stats import binned_statistic
     import matplotlib.pyplot as plt
 
-    # # Remove nan values (and create empty array with original shpae)
-    # num_inds = np.nonzero(~np.isnan(flux))
-    # reshape_flux = np.ones(flux.shape) * np.nan
-    # wave, flux = wave[num_inds], flux[num_inds]
-    
     # Remove Balmer series 
     continuum_inds = np.ones(len(wave), dtype='bool')
     for line, width in zip(rlines+glines+ulines,rwid+gwid+uwid):
         continuum_inds *= ~((wave > line-width) * (wave < line+width))
     continuum_wave = wave[continuum_inds]
     continuum_flux = flux[continuum_inds]
-    # import pdb
-    # pdb.set_trace()
 
     # Smooth spectrum to approximate the continuum
-    xmap = binned_statistic(continuum_wave, continuum_wave, bins=100).statistic
-    ymap = binned_statistic(continuum_wave, continuum_flux, bins=100,
+    xmap = binned_statistic(continuum_wave, continuum_wave, bins=bins).statistic
+    ymap = binned_statistic(continuum_wave, continuum_flux, bins=bins,
                             statistic='median').statistic 
     inds = np.nonzero(~np.isnan(ymap))
     xmap, ymap = xmap[inds], ymap[inds]
-    continuum = interp1d(xmap, ymap, fill_value="extrapolate")
-        # # continuum = make_smoothing_spline(xmap, ymap)
-        # continuum = interp1d(xmap, ymap, fill_value="extrapolate")      
+    contmap = interp1d(xmap, ymap, fill_value="extrapolate")
     
-    # continuum_flux = savgol_filter(continuum_flux, window_length=101, polyorder=3)   
-
-    # Interpolate over entire wavelength range (including Balmer regions)
+    continuum = contmap(wave)
     
-    # contmap = interp1d(continuum_wave, continuum_flux, fill_value='extrapolate',
-    #                    kind='quadratic')
-    # continuum_full = contmap(wave)
+    # # Deal with negative values
+    # inds = np.nonzero(continuum < 1)
+    # continuum[inds] = 1
     
-    # Reshape array to match original shape
-    # reshape_flux[num_inds] = continuum_full
+    # plt.figure(figsize=(12,4))
+    # plt.title('Continuum estimation')
+    # plt.plot(wave, flux, '-k', label='Raw data')
+    # plt.plot(xmap, ymap, '.m', label='Binned data')
+    # plt.plot(wave, continuum(wave), '--b', label='Continuum fit')
+    # plt.legend()
+    # plt.xlabel('Wavelength (Å)')
+    # plt.ylabel('Counts')
     
-    plt.figure(figsize=(12,4))
-    plt.title('Continuum estimation')
-    plt.plot(wave, flux, '-k', label='Raw data')
-    plt.plot(xmap, ymap, '.m', label='Binned data')
-    plt.plot(wave, continuum(wave), '--b', label='Continuum fit')
-    plt.legend()
-    plt.xlabel('Wavelength (Å)')
-    plt.ylabel('Counts')
-    
-    return continuum(wave)
+    return continuum
         
     
 def est_sensfunc():
@@ -195,134 +237,175 @@ def est_sensfunc():
     
     hstspec = np.loadtxt('/Users/emma/projects/LLAMAS_UTILS/LLAMAS_UTILS/ffeige110.dat')
     
-    
-#     inds = np.nonzero( (hstspec[:,0]>2500) * (hstspec[:,0] < 10750))
-#     wave = hstspec[:,0][inds]
-#     flux = hstspec[:,1][inds]
-#     binned_wave = binned_statistic(wave, wave, bins=50).statistic
-#     binned_flux = binned_statistic(wave, flux, bins=50).statistic
-#     hstcont = interp1d(binned_wave, binned_flux, fill_value="extrapolate")
-    
-#     plt.figure(figsize=(12,6))
-#     plt.plot(binned_wave, binned_flux, '.')
-#     plt.plot(wave, hstcont(wave), '-', label='continuum')
-#     plt.plot(wave, flux, '-k', label='data')
-#     plt.legend()
-#     plt.title('ESO Spectrum for Feige 110')
-#     plt.xlabel('Wavelength (Å)')
-#     plt.ylabel(r'Flux (erg cm$^{-2}$ s$^{-1}$ Å$^{-1}$ $\times$ 10$^{16}$)')
-    
     rspec = np.loadtxt('/Users/emma/Desktop/work/250214/F110_LLAMAS_2024-11-28T01_22_09.108_red_counts.txt')
     gspec = np.loadtxt('/Users/emma/Desktop/work/250214/F110_LLAMAS_2024-11-28T01_22_09.108_green_counts.txt')
     uspec = np.loadtxt('/Users/emma/Desktop/work/250214/F110_LLAMAS_2024-11-28T01_22_09.108_blue_counts.txt')
     
-    hstmap = interp1d(hstspec[:,0], hstspec[:,1], fill_value="extrapolate")
-    plt.figure(figsize=(12,4))
-    plt.title('HST Spectrum of Feige 110')
-    plt.plot(hstspec[:,0], hstspec[:,1], '-k', label='HST Spectrum')
-    plt.plot(rspec[:,0], hstmap(rspec[:,0]), '-.r', label='Interpolated wavelength grid')
-    plt.plot(gspec[:,0], hstmap(gspec[:,0]), '-.g', label='Interpolated wavelength grid')
-    plt.plot(uspec[:,0], hstmap(uspec[:,0]), '-.b', label='Interpolated wavelength grid')
-    plt.xlabel('Wavelength (Å)')
-    plt.ylabel(r'Flux (erg cm$^{-2}$ s$^{-1}$ Å$^{-1}$ $\times$ 10$^{16}$)')
+    # # Deal with negative values
+    # inds = np.nonzero(rspec[:,1] < 1)
+    # rspec[:,1][inds] = 1    
+    # inds = np.nonzero(gspec[:,1] < 1)
+    # gspec[:,1][inds] = 1   
+    # inds = np.nonzero(uspec[:,1] < 1)
+    # uspec[:,1][inds] = 1       
     
-    fig, ax = plt.subplots(nrows=3, ncols=2, figsize=(12,7))
-    plt.suptitle('Normalization of LLAMAS Spectrum of Feige 110')
+    hstmap = interp1d(hstspec[:,0], hstspec[:,1], fill_value="extrapolate")
+
+    # Smooth HST spectra to approximate the continuum
+    r_true = est_continuum(rspec[:,0], hstmap(rspec[:,0]))
+    g_true = est_continuum(gspec[:,0], hstmap(gspec[:,0]))
+    u_true = est_continuum(uspec[:,0], hstmap(uspec[:,0]))
     
     # Smooth LLAMAS spectra to approximate the continuum
     r_continuum = est_continuum(rspec[:,0], rspec[:,1])
     g_continuum = est_continuum(gspec[:,0], gspec[:,1])
     u_continuum = est_continuum(uspec[:,0], uspec[:,1])
     
-    # Normalize the LLAMAS spectra
-    r_norm = rspec[:,1] / r_continuum
-    g_norm = gspec[:,1] / g_continuum
-    u_norm = uspec[:,1] / u_continuum    
+    # Calculate instrument response
+    r_response = r_true / r_continuum
+    g_response = g_true / g_continuum
+    u_response = u_true / u_continuum
     
-    # inds = np.nonzero(~np.isnan(rspec[:,1]))
-    # r_poly = Polynomial.fit(rspec[:,0][inds], rspec[:,1][inds], deg=4)
-    # r_continuum = r_poly(rspec[:,0])
+    # Smooth the response function
+    r_response = savgol_filter(r_response, 151, 3)
+    g_response = savgol_filter(g_response, 151, 3)
+    u_response = savgol_filter(u_response, 151, 3)
+    
+    
+    # r_response = hstmap(rspec[:,0]) / r_continuum
+    # g_response = hstmap(gspec[:,0]) / g_continuum
+    # u_response = hstmap(uspec[:,0]) / u_continuum    
+    
+    # # Normalize the LLAMAS spectra
     # r_norm = rspec[:,1] / r_continuum
-    
-    # inds = np.nonzero(~np.isnan(gspec[:,1]))
-    # g_poly = Polynomial.fit(gspec[:,0][inds], gspec[:,1][inds], deg=4)
-    # g_continuum = g_poly(gspec[:,0])
     # g_norm = gspec[:,1] / g_continuum
-
-    # inds = np.nonzero(~np.isnan(uspec[:,1]))
-    # u_poly = Polynomial.fit(uspec[:,0][inds], uspec[:,1][inds], deg=4)
-    # u_continuum = u_poly(uspec[:,0])
     # u_norm = uspec[:,1] / u_continuum    
-    
-    ax[2][0].plot(rspec[:,0], rspec[:,1], '-r')
-    ax[2][0].plot(rspec[:,0], r_continuum, '-.k')
-    ax[2][1].plot(rspec[:,0], r_norm, '-r')
-    ax[2][0].set_xlabel('Wavelength (Å)')
-    ax[2][1].set_xlabel('Wavelength (Å)')
-    
-    ax[1][0].plot(gspec[:,0], gspec[:,1], '-g')
-    ax[1][0].plot(gspec[:,0], g_continuum, '-.k')
-    ax[1][1].plot(gspec[:,0], g_norm, '-g')
-    ax[1][0].set_ylabel('Counts')
-    ax[1][1].set_ylabel('Relative Flux')
 
-    ax[0][0].plot(uspec[:,0], uspec[:,1], '-b')
-    ax[0][0].plot(uspec[:,0], u_continuum, '-.k')
-    ax[0][1].plot(uspec[:,0], u_norm, '-b')
-    ax[0][1].set_title('Normalized Spectrum')
-    ax[0][0].set_title('Raw Spectrum + Continuum fit')
+    # Calculate instrument response
+    # r_response = hstmap(rspec[:,0]) / r_norm 
+    # g_response = hstmap(gspec[:,0]) / g_norm
+    # u_response = hstmap(uspec[:,0]) / u_norm
+    
+    # rcnt = np.nansum(rspec[:,1])
+    # gcnt = np.nansum(gspec[:,1])
+    # ucnt = np.nansum(uspec[:,1])    
+    
+    # -------------------------------------------------------------------------
+    
+    fig, ax = plt.subplots(figsize=(20, 7), nrows=2, ncols=3)
+    plt.suptitle('Sensitivity in red channel')
+    
+    ax[0][0].plot(rspec[:,0], rspec[:,1], '-r', label='Raw LLAMAS spectrum')
+    ylim = ax[0][0].get_ylim()
+    ax[0][0].plot(rspec[:,0], r_response*1000, '-k', label='scaled Sensitivity')
+    ax[0][0].set_ylim(ylim)
+    ax[1][0].plot(rspec[:,0], hstmap(rspec[:,0]), '-k', label='HST Spectrum')
+    ax[1][0].plot(rspec[:,0], r_response*rspec[:,1], '--r',
+                  label='Flux-calibrated LLAMAS spectrum')
+      
+    ax[0][1].plot(gspec[:,0], gspec[:,1], '-g', label='Raw LLAMAS spectrum')
+    ylim = ax[0][1].get_ylim()
+    ax[0][1].plot(gspec[:,0], g_response*1000, '-k', label='scaled Sensitivity')
+    ax[0][1].set_ylim(ylim)
+    ax[1][1].plot(gspec[:,0], hstmap(gspec[:,0]), '-k', label='HST Spectrum')
+    ax[1][1].plot(gspec[:,0], g_response*gspec[:,1], '--g',
+                  label='Flux-calibrated LLAMAS spectrum')
 
-    plt.subplots_adjust(hspace=0)  
+    ax[0][2].plot(uspec[:,0], uspec[:,1], '-b', label='Raw LLAMAS spectrum')
+    ylim = ax[0][2].get_ylim()
+    ax[0][2].plot(uspec[:,0], u_response*1000, '-k', label='scaled Sensitivity')
+    ax[0][2].set_ylim(ylim)
+    ax[1][2].plot(uspec[:,0], hstmap(uspec[:,0]), '-k', label='HST Spectrum')
+    ax[1][2].plot(uspec[:,0], u_response*uspec[:,1], '--b', 
+                  label='Flux-calibrated LLAMAS spectrum')    
 
-    r_response = hstmap(rspec[:,0]) / r_norm 
-    g_response = hstmap(gspec[:,0]) / g_norm
-    u_response = hstmap(uspec[:,0]) / u_norm
+
+    ax[0][0].set_ylabel('Counts')
+    ax[0][0].legend()
+    ax[1][0].set_ylabel(r'Flux (erg cm$^{-2}$ s$^{-1}$ Å$^{-1}$ $\times$ 10$^{16}$)')
+    ax[1][0].set_xlabel('Wavelength (Å)')
+    ax[1][0].legend()
+    ax[0][1].legend()
+    ax[1][1].set_xlabel('Wavelength (Å)')
+    ax[1][1].legend()
+    ax[0][2].legend()
+    ax[1][2].set_xlabel('Wavelength (Å)')    
+    ax[1][2].legend()
+    
+    plt.subplots_adjust(hspace=0, left=0.05, right=0.99)
+    
+    # plt.figure(figsize=(12,4))
+    # plt.title('HST Spectrum of Feige 110')
+    # # plt.plot(hstspec[:,0], hstspec[:,1], '-k', label='HST Spectrum')
+    # plt.plot(rspec[:,0], hstmap(rspec[:,0]), '-.r', label='HST Spectrum')
+    # plt.plot(rspec[:,0], r_true, '--k', label='Continuum fit')
+    # plt.plot(gspec[:,0], hstmap(gspec[:,0]), '-.g')
+    # plt.plot(gspec[:,0], g_true, '--k')
+    # plt.plot(uspec[:,0], hstmap(uspec[:,0]), '-.b')
+    # plt.plot(uspec[:,0], u_true, '--k')
+    # plt.xlabel('Wavelength (Å)')
+    # plt.ylabel(r'Flux (erg cm$^{-2}$ s$^{-1}$ Å$^{-1}$ $\times$ 10$^{16}$)')
+    # plt.legend()
+    
+    # fig, ax = plt.subplots(nrows=3, figsize=(12,7))
+    # plt.suptitle('Flux calibration of Feige 110')
+    
+    # inds = np.nonzero((hstspec[:,0]>np.min(rspec[:,0])) * \
+    #                   (hstspec[:,0]<np.max(rspec[:,0])))
+    # ax[2].plot(hstspec[:,0][inds], hstspec[:,1][inds], '-k', label='HST Spectrum')
+    # ax[2].plot(rspec[:,0], r_response*rspec[:,1], '-.r',
+    #            label='Flux-calibrated LLAMAS spectrum')
+    # ax[2].set_xlabel('Wavelength (Å)')
+    # ax[2].legend()
+
+    # inds = np.nonzero((hstspec[:,0]>np.min(gspec[:,0])) * \
+    #                   (hstspec[:,0]<np.max(gspec[:,0])))
+    # ax[1].plot(hstspec[:,0][inds], hstspec[:,1][inds], '-k', label='HST Spectrum')
+    # ax[1].plot(gspec[:,0], g_response*gspec[:,1], '-.g',
+    #            label='Flux-calibrated LLAMAS spectrum')
+    # ax[1].set_ylabel(r'Flux (erg cm$^{-2}$ s$^{-1}$ Å$^{-1}$ $\times$ 10$^{16}$)')    
+    # ax[1].legend()
+
+    # inds = np.nonzero((hstspec[:,0]>np.min(uspec[:,0])) * \
+    #                   (hstspec[:,0]<np.max(uspec[:,0])))
+    # ax[0].plot(hstspec[:,0][inds], hstspec[:,1][inds], '-k', label='HST Spectrum')
+    # ax[0].plot(uspec[:,0], u_response*uspec[:,1], '-.b',
+    #            label='Flux-calibrated LLAMAS spectrum') 
+    # ax[0].legend()
+    # plt.subplots_adjust(hspace=0)
+    
+    # fig, ax = plt.subplots(nrows=3, figsize=(12,7))
+    # plt.suptitle('Sensitivity function')
+    # ax[2].plot(rspec[:,0], r_response, '-k')
+    # ax[2].set_xlabel('Wavelength (Å)')
+    # ax[1].plot(gspec[:,0], g_response, '-k')
+    # ax[1].set_ylabel('Instrument response')
+    # ax[0].plot(uspec[:,0], u_response, '-k')
+    
+    # fig, ax = plt.subplots(nrows=3, ncols=2, figsize=(12,7))
+    # plt.suptitle('Normalization of LLAMAS Spectrum of Feige 110')
+    
+    # ax[2][0].plot(rspec[:,0], rspec[:,1], '-r')
+    # ax[2][0].plot(rspec[:,0], r_continuum, '-.k')
+    # ax[2][1].plot(rspec[:,0], r_norm, '-r')
+    # ax[2][0].set_xlabel('Wavelength (Å)')
+    # ax[2][1].set_xlabel('Wavelength (Å)')
+    
+    # ax[1][0].plot(gspec[:,0], gspec[:,1], '-g')
+    # ax[1][0].plot(gspec[:,0], g_continuum, '-.k')
+    # ax[1][1].plot(gspec[:,0], g_norm, '-g')
+    # ax[1][0].set_ylabel('Counts')
+    # ax[1][1].set_ylabel('Relative Flux')
+
+    # ax[0][0].plot(uspec[:,0], uspec[:,1], '-b')
+    # ax[0][0].plot(uspec[:,0], u_continuum, '-.k')
+    # ax[0][1].plot(uspec[:,0], u_norm, '-b')
+    # ax[0][1].set_title('Normalized Spectrum')
+    # ax[0][0].set_title('Raw Spectrum + Continuum fit')
+
+    # plt.subplots_adjust(hspace=0)      
     
     
-    fig, ax = plt.subplots(nrows=3, figsize=(12,7))
-    plt.suptitle('Sensitivity function estimation (using Feige 110)')
-    
-    inds = np.nonzero((hstspec[:,0]>np.min(rspec[:,0])) * \
-                      (hstspec[:,0]<np.max(rspec[:,0])))
-    ax[2].plot(hstspec[:,0][inds], hstspec[:,1][inds], '-k', label='HST Spectrum')
-    ax[2].plot(rspec[:,0], r_response*r_norm, '-.r', label='Flux-calibrated LLAMAS spectrum')
-    ax[2].set_xlabel('Wavelength (Å)')
-    ax[2].legend()
-
-    inds = np.nonzero((hstspec[:,0]>np.min(gspec[:,0])) * \
-                      (hstspec[:,0]<np.max(gspec[:,0])))
-    ax[1].plot(hstspec[:,0][inds], hstspec[:,1][inds], '-k', label='HST Spectrum')
-    ax[1].plot(gspec[:,0], g_response*g_norm, '-.g', label='Flux-calibrated LLAMAS spectrum')
-    ax[1].set_ylabel(r'Flux (erg cm$^{-2}$ s$^{-1}$ Å$^{-1}$ $\times$ 10$^{16}$)')    
-    ax[1].legend()
-
-    inds = np.nonzero((hstspec[:,0]>np.min(uspec[:,0])) * \
-                      (hstspec[:,0]<np.max(uspec[:,0])))
-    ax[0].plot(hstspec[:,0][inds], hstspec[:,1][inds], '-k', label='HST Spectrum')
-    ax[0].plot(uspec[:,0], u_response*u_norm, '-.b', label='Flux-calibrated LLAMAS spectrum') 
-    ax[0].legend()
-    plt.subplots_adjust(hspace=0)
-    
-    
-# #     for i, color in ennumerate(['red', 'green', 'blue']):
-#     inds = np.ones(len(rspec[:,0]), dtype='bool')
-#     for i in range(len(rlines)):
-#         inds *= ~((rspec[:,0] > rlines[i]-rwid[i]) * \
-#                   (rspec[:,0] < rlines[i]+rwid[i]))
-#     rspec = rspec[inds]
-
-#     xmap = binned_statistic(rspec[:,0], rspec[:,0], bins=60).statistic
-#     ymap = binned_statistic(rspec[:,0], rspec[:,1], bins=60, statistic='median').statistic 
-#     inds = np.nonzero(~np.isnan(ymap))
-#     xmap, ymap = xmap[inds], ymap[inds]
-#     llamascont = interp1d(xmap, ymap, fill_value="extrapolate") 
-
-#     plt.figure()
-#     plt.plot(rspec[:,0], rspec[:,1], '-', color='red')
-#     plt.plot(xmap, ymap, '.k')
-#     plt.plot(rspec[:,0], llamascont(rspec[:,0]), '-k')
-#     plt.xlabel('Wavelength [Angstrom]')
-#     plt.ylabel('Counts')   
     
 #     xmap = llamascont(rspec[:,0])
 #     ymap = hstcont(rspec[:,0])
@@ -331,23 +414,9 @@ def est_sensfunc():
 #     plt.figure()
 #     plt.plot(rspec[:,0], sensfunc(rspec[:,1]))
 #     plt.plot(rspec[:,0], hstcont(rspec[:,0]), '-', label='continuum')    
-    
-    # plt.figure(figsize=(12,6))
-    # plt.plot(wave, flux/sensfunc(wave), '-k')
-    
-    # xspec = np.loadtxt('/Users/emma/projects/LLAMAS_UTILS/LLAMAS_UTILS/fFeige110_xshooter.dat')
-    # plt.figure(figsize=(12,6))
-    # inds = np.nonzero( (xspec[:,0]>3500) * (xspec[:,0] < 9750))
-    # plt.plot(xspec[:,0][inds], xspec[:,1][inds], '-k')
-    # plt.xlabel('Wavelength (Å)')
-    # plt.ylabel(r'Flux (erg cm$^{-2}$ s$^{-1}$ Å$^{-1}$ $\times$ 10$^{16}$)')
-    
-    rcnt = np.nansum(rspec[:,1])
-    gcnt = np.nansum(gspec[:,1])
-    ucnt = np.nansum(uspec[:,1])
 
     
-    return r_response, g_response, u_response, rcnt, gcnt, ucnt
+    return r_response, g_response, u_response # , rcnt, gcnt, ucnt
 
 def wavecal():
     from scipy.interpolate import interp1d
@@ -381,28 +450,30 @@ def fluxcal(waves, spectra):
     import matplotlib.pyplot as plt
     # from scipy.interpolate import make_smoothing_spline
     
-    rfunc, gfunc, ufunc, rcnt, gcnt, ucnt = est_sensfunc()
+    rfunc, gfunc, ufunc = est_sensfunc()
     
     calib_spectra = []
     
     for i, color in enumerate(['red','green','blue']):
         wave, flux = waves[i], spectra[i]
         
-        continuum = est_continuum(wave, flux)
-        norm_flux = flux / continuum     
+        
+        # continuum = est_continuum(wave, flux)
+        # norm_flux = flux / continuum     
         
         if color == 'red':
-            scaling_factor = np.nansum(flux) / rcnt
+        #     scaling_factor = np.nansum(flux) / rcnt
             response = rfunc
             
         elif color == 'green':
-            scaling_factor = np.nansum(flux) / gcnt
+        #     scaling_factor = np.nansum(flux) / gcnt
             response = gfunc
         elif color == 'blue':
-            scaling_factor = np.nansum(flux) / ucnt
+        #     scaling_factor = np.nansum(flux) / ucnt
             response = ufunc
         
-        cal_flux = norm_flux * response * scaling_factor
+        # cal_flux = norm_flux * response * scaling_factor
+        cal_flux = flux * response
         calib_spectra.append(cal_flux)
         
         # # Remove nans

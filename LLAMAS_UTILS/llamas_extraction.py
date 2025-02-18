@@ -1,15 +1,17 @@
 # Based on lalmas_pyjamas/Tutorials/llamas_extraction_demo.ipynb
 
-# filepath = '/Users/emma/projects/llamas-test/standard/LLAMAS_2024-11-28T01_22_09.108_mef.fits'
-# aper = [[22.51, 22.73], [22.51, 22.73], [22.51, 22.73]]
+# filepath = '/Users/emma/projects/llamas-data/standard/LLAMAS_2024-11-28T01_22_09.108_mef.fits'
+# aper = [[22.51, 22.73], [22.51, 22.73], [23.39, 23.73]]
+# skyaper = [[22.51+4, 22.73], [22.51+4, 22.73], [23.39+4, 23.73]]
 # objname = 'F110'
 
-# filepath = '/Users/emma/projects/llamas-test/ATLASJ1013/LLAMAS_2024-11-30T08_22_09.466_mef.fits'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_22_09.466_mef.fits'
 # aper = [[23.72, 23.65], [23.72, 23.65], [23.72, 23.65]]
 # objname = 'J1013'
 
-filepath = '/Users/emma/projects/llamas-test/ATLASJ1138/LLAMAS_2024-11-28T07_41_00.294_mef.fits'
+filepath = '/Users/emma/projects/llamas-data/ATLASJ1138/LLAMAS_2024-11-28T07_41_00.294_mef.fits'
 aper = [[11.27, 19.1], [11.75, 20], [11.27, 20.87]]
+skyaper = [[11.27+4, 19.1], [11.75+4, 20], [11.27+4, 20.87]]
 objname = 'J1138'
 
 
@@ -68,14 +70,27 @@ plot_whitelight(whitelight, aper)
 
 # Get spectra
 spectra = extract_fiber(exobj, LUT, aper)
+sky = extract_fiber(exobj, LUT, skyaper)
+fig, ax = plt.subplots(nrows=3, figsize=(12,7))
+for i in range(3):
+    ax[i].plot(spectra[i], color=colors[i], label='Raw science',
+                alpha=0.5)
+    ax[i].plot(sky[i], '-k', label='Sky')
+    spectra[i] = spectra[i] - sky[i]
+    ax[i].plot(spectra[i], alpha=0.5,
+                color='dark'+colors[i], label='Sky-subtracted science')
+    ax[i].set_ylabel('Counts')
+    ax[i].set_xlabel('Pixel')
+    ax[i].legend()
+
+# # Get sky-subtracted spectra
+# spectra = extract_aper(exobj, LUT, aper)
+
+
 
 # Estimate wavelength calibration
 waves = wavecal()
 
-
-# from LLAMAS_UTILS.pyjamas_utils import get_sensfunc
-
-# sensfunc = get_sensfunc()
 
 
 # Estimate flux calibration
@@ -95,7 +110,7 @@ for i, color in enumerate(colors):
 fig, ax = plt.subplots(figsize=(20,5))
 plt.suptitle('Raw LLAMAS Spectrum of '+objname)
 
-fig_binned, ax_binned = plt.subplots(figsize=(20,5))
+fig_cal, ax_cal = plt.subplots(figsize=(20,5))
 plt.suptitle('Flux-Calibrated LLAMAS Spectrum of '+objname)
 
 detector = np.array(['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B'])
@@ -109,24 +124,33 @@ for i, color in enumerate(colors):
     ax.plot(wave, flux, '-', color=color)  
     
     # Plot binned flux-calibrated spectrum    
-    binned_w = binned_statistic(wave, wave, bins=256).statistic
-    binned_f = binned_statistic(wave, calib_flux, bins=256,
-                                statistic='median').statistic   
-    if color == 'blue':
-        inds = np.nonzero( (binned_w < 4644) * (binned_w > 3571))
-        binned_w, binned_f = binned_w[inds], binned_f[inds]
-    if color == 'green':
-        inds = np.nonzero( binned_w < 6950 )
-        binned_w, binned_f = binned_w[inds], binned_f[inds]       
+    # binned_w = binned_statistic(wave, wave, bins=256).statistic
+    # binned_f = binned_statistic(wave, calib_flux, bins=256,
+    #                             statistic='median').statistic   
+    # if color == 'blue':
+    #     inds = np.nonzero( (binned_w < 4644) * (binned_w > 3571))
+    #     binned_w, binned_f = binned_w[inds], binned_f[inds]
+    # if color == 'green':
+    #     inds = np.nonzero( binned_w < 6950 )
+    #     binned_w, binned_f = binned_w[inds], binned_f[inds]       
         
-    ax_binned.plot(binned_w, binned_f, '-', color=color)
+    # ax_cal.plot(binned_w, binned_f, '-', color=color)
+    
+    if color == 'blue':
+        inds = np.nonzero( (wave < 4644) * (wave > 3571))
+        wave, calib_flux = wave[inds], calib_flux[inds]
+    if color == 'green':
+        inds = np.nonzero( wave < 6950)
+        wave, calib_flux = wave[inds], calib_flux[inds]
+    
+    ax_cal.plot(wave, calib_flux, '-', color=color)
     
 ax.set_xlabel('Wavelength (Å)')
 ax.set_ylabel('Counts')
 fig.tight_layout()
 fig.savefig(out_dir+ext+'_counts.png', dpi=300)
 
-ax_binned.set_xlabel('Wavelength (Å)')
-ax_binned.set_ylabel(r'Flux (erg cm$^{-2}$ s$^{-1}$ Å$^{-1}$ $\times$ 10$^{16}$)')
-fig_binned.tight_layout()
-fig_binned.savefig(out_dir+ext+'_fluxcal.png', dpi=300)
+ax_cal.set_xlabel('Wavelength (Å)')
+ax_cal.set_ylabel(r'Flux (erg cm$^{-2}$ s$^{-1}$ Å$^{-1}$ $\times$ 10$^{16}$)')
+fig_cal.tight_layout()
+fig_cal.savefig(out_dir+ext+'_fluxcal.png', dpi=300)
