@@ -295,28 +295,28 @@ def est_sensfunc():
     fig, ax = plt.subplots(figsize=(20, 7), nrows=2, ncols=3)
     plt.suptitle('Sensitivity in red channel')
     
-    ax[0][0].plot(rspec[:,0], rspec[:,1], '-r', label='Raw LLAMAS spectrum')
+    ax[0][2].plot(rspec[:,0], rspec[:,1], '-r', label='Raw LLAMAS spectrum')
     ylim = ax[0][0].get_ylim()
-    ax[0][0].plot(rspec[:,0], r_response*1000, '-k', label='scaled Sensitivity')
-    ax[0][0].set_ylim(ylim)
-    ax[1][0].plot(rspec[:,0], hstmap(rspec[:,0]), '-k', label='HST Spectrum')
-    ax[1][0].plot(rspec[:,0], r_response*rspec[:,1], '--r',
+    ax[0][2].plot(rspec[:,0], r_response*1000, '-k', label='scaled Sensitivity')
+    ax[0][2].set_ylim(ylim)
+    ax[1][2].plot(rspec[:,0], hstmap(rspec[:,0])+500, '-k', label='HST Spectrum')
+    ax[1][2].plot(rspec[:,0], r_response*rspec[:,1], '--r',
                   label='Flux-calibrated LLAMAS spectrum')
       
     ax[0][1].plot(gspec[:,0], gspec[:,1], '-g', label='Raw LLAMAS spectrum')
     ylim = ax[0][1].get_ylim()
     ax[0][1].plot(gspec[:,0], g_response*1000, '-k', label='scaled Sensitivity')
     ax[0][1].set_ylim(ylim)
-    ax[1][1].plot(gspec[:,0], hstmap(gspec[:,0]), '-k', label='HST Spectrum')
+    ax[1][1].plot(gspec[:,0], hstmap(gspec[:,0])+500, '-k', label='HST Spectrum')
     ax[1][1].plot(gspec[:,0], g_response*gspec[:,1], '--g',
                   label='Flux-calibrated LLAMAS spectrum')
 
-    ax[0][2].plot(uspec[:,0], uspec[:,1], '-b', label='Raw LLAMAS spectrum')
+    ax[0][0].plot(uspec[:,0], uspec[:,1], '-b', label='Raw LLAMAS spectrum')
     ylim = ax[0][2].get_ylim()
-    ax[0][2].plot(uspec[:,0], u_response*1000, '-k', label='scaled Sensitivity')
-    ax[0][2].set_ylim(ylim)
-    ax[1][2].plot(uspec[:,0], hstmap(uspec[:,0]), '-k', label='HST Spectrum')
-    ax[1][2].plot(uspec[:,0], u_response*uspec[:,1], '--b', 
+    ax[0][0].plot(uspec[:,0], u_response*1000, '-k', label='scaled Sensitivity')
+    ax[0][0].set_ylim(ylim)
+    ax[1][0].plot(uspec[:,0], hstmap(uspec[:,0])+500, '-k', label='HST Spectrum')
+    ax[1][0].plot(uspec[:,0], u_response*uspec[:,1], '--b', 
                   label='Flux-calibrated LLAMAS spectrum')    
 
 
