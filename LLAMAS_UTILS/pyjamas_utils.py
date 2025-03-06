@@ -131,7 +131,9 @@ def extract_aper(exobj, LUT, aper):
     ypos = fibermap[:,3].astype('float') 
     
     spectra = []
-    fig, ax = plt.subplots(nrows=3, figsize=(12,7))
+    
+    waves = wavecal()
+    
     for i, color in enumerate(['red', 'green', 'blue']):
         dist = (xpos-aper[i][0])**2 + (ypos-aper[i][1])**2
         
@@ -150,7 +152,22 @@ def extract_aper(exobj, LUT, aper):
             w_arr.append(np.nansum(counts))
         aper_arr = np.array(aper_arr)
         w_arr = np.array(w_arr)
-        w_arr = w_arr / np.sum(w_arr)
+        w_arr = w_arr / np.sum(w_arr)        
+        
+        fig, ax = plt.subplots(figsize=(12,10), nrows=len(aper_arr), sharex=True)
+        plt.suptitle(color+' target aperture')
+        for j in range(len(aper_arr)):
+            # [j].plot(aper_arr[j], c=color)
+            ax[j].plot(waves[i], aper_arr[j], c=color)            
+            ax[j].text(0.05, 0.95, 'Weight: '+str(np.round(w_arr[j], 2)),
+                        transform=ax[j].transAxes, ha='left', va='top')
+        ax[int(len(aper_arr)/2)].set_ylabel('Counts')
+        # ax[-1].set_xlabel('Pixel')
+        ax[-1].set_xlabel('Approx. Wavelength (Å)')        
+        plt.subplots_adjust(hspace=0)
+
+
+
         w_arr = np.repeat(np.expand_dims(w_arr, 1), 2048, axis=1)
         
         weighted_sum = np.nansum(aper_arr * w_arr, axis=0)  # Weighted sum
@@ -173,15 +190,30 @@ def extract_aper(exobj, LUT, aper):
         annulus_arr = np.array(annulus_arr)
         sky_counts = np.nanmedian(annulus_arr, axis=0)
         
+        fig, ax = plt.subplots(figsize=(12,10), nrows=len(annulus_arr), sharex=True)
+        plt.suptitle(color+' sky annulus')
+        for j in range(len(annulus_arr)):
+            # ax[j].plot(annulus_arr[j], c=color)
+            ax[j].plot(waves[i], annulus_arr[j], c=color)            
+        ax[int(len(annulus_arr)/2)].set_ylabel('Counts')
+        # ax[-1].set_xlabel('Pixel')      
+        ax[-1].set_xlabel('Approx. Wavelength (Å)')             
+        plt.subplots_adjust(hspace=0)        
+        
+        
         skysub_counts = avg_counts - sky_counts
         spectra.append(skysub_counts)
         
-        ax[i].plot(avg_counts, c=color, label='Aperture science')
-        ax[i].plot(sky_counts, c='k', label='Annulus sky')
-        ax[i].plot(skysub_counts, c='dark'+color, label='Sky-subtracted science')
-        ax[i].set_ylabel('Counts')
-        ax[i].set_xlabel('Pixel')
-        ax[i].legend()
+        fig, ax = plt.subplots(nrows=3, figsize=(12,7), sharex=True)
+        ax[0].plot(avg_counts, c=color, label='Aperture science')
+        ax[1].plot(sky_counts, c='k', label='Annulus sky')
+        ax[2].plot(skysub_counts, c=color, label='Sky-subtracted science')
+        ax[1].set_ylabel('Counts')
+        ax[2].set_xlabel('Pixel')
+        ax[0].legend()
+        ax[1].legend()
+        ax[2].legend()
+    
         
         
         

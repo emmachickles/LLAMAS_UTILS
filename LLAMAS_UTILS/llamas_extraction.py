@@ -5,7 +5,16 @@
 # skyaper = [[22.51+4, 22.73], [22.51+4, 22.73], [23.39+4, 23.73]]
 #objname = 'F110'
 
-filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_22_09.466_mef.fits'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_22_09.466_mef.fits'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_24_06.175_mef.fits'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_25_54.028_mef.fits'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_27_44.893_mef.fits'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_29_35.964_mef.fits'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_31_21.158_mef.fits'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_33_09.110_mef.fits'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_35_03.104_mef.fits'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_36_50.070_mef.fits'
+filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_38_36.523_mef.fits'
 aper = [[23.72, 23.65], [23.72, 23.65], [23.72, 23.65]]
 objname = 'J1013'
 
@@ -18,7 +27,7 @@ objname = 'J1013'
 choose_brightest = False
 
 
-out_dir = '/Users/emma/Desktop/work/250214/'
+out_dir = '/Users/emma/Desktop/work/250304/LLAMAS/'
 out_dir +=objname+'_'
 
 # -----------------------------------------------------------------------------
@@ -54,7 +63,7 @@ colors = ['red', 'green', 'blue']
 
 # -- extraction ---------------------------------------------------------------
 
-if not os.path.exists(extract_pickle):
+if not os.path.exists(extract_pickle): 
     run_extract(filepath)
     
 with open(extract_pickle, 'rb') as f:
@@ -67,18 +76,19 @@ whitelight = fits.open(white_fits)
 if choose_brightest:
     aper = get_fiber(whitelight)
 plot_whitelight(whitelight, aper)
+plt.savefig(out_dir+ext+'_whitelight.png', dpi=300)
 
 # Get spectra
 spectra = extract_fiber(exobj, LUT, aper)
-sky = extract_fiber(exobj, LUT, skyaper)
+#sky = extract_fiber(exobj, LUT, skyaper)
 fig, ax = plt.subplots(nrows=3, figsize=(12,7))
 for i in range(3):
     ax[i].plot(spectra[i], color=colors[i], label='Raw science',
                 alpha=0.5)
-    ax[i].plot(sky[i], '-k', label='Sky')
-    spectra[i] = spectra[i] - sky[i]
-    ax[i].plot(spectra[i], alpha=0.5,
-                color='dark'+colors[i], label='Sky-subtracted science')
+    # ax[i].plot(sky[i], '-k', label='Sky')
+    # spectra[i] = spectra[i] - sky[i]
+    # ax[i].plot(spectra[i], alpha=0.5,
+    #             color='dark'+colors[i], label='Sky-subtracted science')
     ax[i].set_ylabel('Counts')
     ax[i].set_xlabel('Pixel')
     ax[i].legend()
@@ -86,6 +96,8 @@ for i in range(3):
 # # Get sky-subtracted spectra
 # spectra = extract_aper(exobj, LUT, aper)
 
+# import pdb
+# pdb.set_trace()
 
 
 # Estimate wavelength calibration
@@ -96,15 +108,15 @@ waves = wavecal()
 # Estimate flux calibration
 calib_spectra = fluxcal(waves, spectra)
 
-# Save spectrum
-for i, color in enumerate(colors):
-    data = np.array([waves[i], spectra[i]]).T
-    np.savetxt(out_dir+ext+color+'_counts.txt', data)    
-    print('Saved '+out_dir+ext+color+'_counts.txt')
+# # Save spectrum
+# for i, color in enumerate(colors):
+#     data = np.array([waves[i], spectra[i]]).T
+#     np.savetxt(out_dir+ext+color+'_counts.txt', data)    
+#     print('Saved '+out_dir+ext+color+'_counts.txt')
     
-    data = np.array([waves[i], calib_spectra[i]]).T
-    np.savetxt(out_dir+ext+color+'_fluxcal.txt', data)
-    print('Saved '+out_dir+ext+color+'_fluxcal.txt')
+#     data = np.array([waves[i], calib_spectra[i]]).T
+#     np.savetxt(out_dir+ext+color+'_fluxcal.txt', data)
+#     print('Saved '+out_dir+ext+color+'_fluxcal.txt')
 
 # Plot science spectrum
 fig, ax = plt.subplots(figsize=(20,5))
