@@ -37,6 +37,7 @@ from matplotlib.widgets import Slider
 from scipy.optimize import curve_fit
 from scipy.signal import correlate, correlation_lags
 from scipy.ndimage import shift
+from scipy.interpolate import interp1d
 plt.ion()
 
 
@@ -394,94 +395,115 @@ for c in ['g', 'b']: # enumerate(['r', 'g', 'b']):
     
 # -- get solutions ------------------------------------------------------------
 
-fiber = 100
-red_spec1 = r_exobj['extractions'][18].counts[fiber]
-green_spec1 = g_exobj['extractions'][19].counts[fiber]
-blue_spec1 = b_exobj['extractions'][20].counts[fiber]
-
-for c in ['g', 'b']:
-    if c == 'r':
-        inds = red_inds
-        wave = red_wave
-        spec = red_spec
-        spec1 = red_spec1
-        synth = red_synth
-        wave_sol = red_wave_sol
-    elif c == 'g':
-        inds = green_inds
-        wave = green_wave
-        spec = green_spec
-        spec1 = green_spec1
-        synth = green_synth
-        wave_sol = green_wave_sol
-    elif c == 'b':
-        inds = blue_inds
-        wave = blue_wave
-        spec = blue_spec
-        spec1 = blue_spec1
-        synth = blue_synth
-        wave_sol = blue_wave_sol
+for fiber in range(300):
+    print(fiber)
+    
+    # fiber = 100
+    red_spec1 = r_exobj['extractions'][18].counts[fiber]
+    green_spec1 = g_exobj['extractions'][19].counts[fiber]
+    blue_spec1 = b_exobj['extractions'][20].counts[fiber]
+    
+    for c in ['g', 'b']:
+        if c == 'r':
+            inds = red_inds
+            wave = red_wave
+            spec = red_spec
+            spec1 = red_spec1
+            synth = red_synth
+            wave_sol = red_wave_sol
+        elif c == 'g':
+            inds = green_inds
+            wave = green_wave
+            spec = green_spec
+            spec1 = green_spec1
+            synth = green_synth
+            wave_sol = green_wave_sol
+        elif c == 'b':
+            inds = blue_inds
+            wave = blue_wave
+            spec = blue_spec
+            spec1 = blue_spec1
+            synth = blue_synth
+            wave_sol = blue_wave_sol
+            
+        nan_inds = np.nonzero(np.isnan(spec))[0]
+        num_inds = np.nonzero(~np.isnan(spec))[0]
         
-    nan_inds = np.nonzero(np.isnan(spec))[0]
-    num_inds = np.nonzero(~np.isnan(spec))[0]
+        spec[nan_inds] = np.interp(nan_inds, num_inds, spec[num_inds])
     
-    spec[nan_inds] = np.interp(nan_inds, num_inds, spec[num_inds])
-
-    nan_inds = np.nonzero(np.isnan(spec1))[0]
-    num_inds = np.nonzero(~np.isnan(spec1))[0]
-    
-    spec1[nan_inds] = np.interp(nan_inds, num_inds, spec1[num_inds])
-
-    # # Compute the cross-correlation
-    # corr = correlate(spec1, spec, mode='full')
-    
-    # # Compute the lags
-    # lags = correlation_lags(len(spec1), len(spec), mode='full')
-
-    # # Find the shift corresponding to the peak
-    # p = np.polyfit(lags, corr, 5)
-    # lag_interp = np.linspace(np.min(lags), np.max(lags), 20000)
-    # corr_interp = np.polyval(p, lag_interp)
-    # shift_out = lag_interp[np.argmax(corr_interp)]
-    
-    # plt.figure()
-    # plt.plot(lags, corr, '-k')
-    # plt.plot(lag_interp, corr_interp, lw=1)
-    # plt.xlabel('Lags')
-    # plt.ylabel('Correlation')
-    
-    # spec_corr = shift(spec1, shift=-shift_out, mode='nearest')
-    # new_wave_sol = shift(wave_sol, shift=shift_out, mode='nearest')
-    
-      
-    
-    good_inds = np.nonzero(~np.isnan(spec))
-    wave, spec, synth, spec1 = wave[good_inds], spec[good_inds], synth[good_inds], spec1[good_inds]
-
-    result_out, shift_out, stretch_out, stretch2_out, corr_out, shift_cc, corr_cc = \
-        xcorr_shift_stretch(synth, spec, shift_mnmx=(-0.01, 0.01),
-                            debug=True, sigdetect=20) 
+        nan_inds = np.nonzero(np.isnan(spec1))[0]
+        num_inds = np.nonzero(~np.isnan(spec1))[0]
         
-    spec_corr = shift_and_stretch(spec, shift_out, stretch_out, stretch2_out)
-    new_wave_sol = shift_and_stretch(wave_sol, shift_out, stretch_out, stretch2_out)
+        spec1[nan_inds] = np.interp(nan_inds, num_inds, spec1[num_inds])
     
-    np.savetxt('wavecal_solutions/'+c+'_'+str(fiber)+'.txt', new_wave_sol)  
-    
-    fig, ax = plt.subplots(figsize=(20,12), nrows=3, sharex=True)
-    ax[0].plot(wave_sol, spec1, '--k', label='Raw arc')
-    ax[0].plot(wave_sol, spec_corr)
-    ax[0].plot(new_wave_sol, spec1, '-'+c, label='Shifted arc')
-    ax[1].plot(wave_sol, spec, '-'+c, label='Reference spectrum')
-    ax[2].plot(wave, synth, '-k', label='ThAr library')
-    ax[2].set_xlabel('Wavelength')
-    ax[0].set_ylabel('Counts')
-    ax[1].set_ylabel('Amplitude')
-    ax[0].legend()
-    ax[1].legend()
-    ax[2].legend()
-    plt.subplots_adjust(hspace=0)
-    
-
-
+        # # Compute the cross-correlation
+        # corr = correlate(spec1, spec, mode='full')
         
-  
+        # # Compute the lags
+        # lags = correlation_lags(len(spec1), len(spec), mode='full')
+    
+        # # Find the shift corresponding to the peak
+        # p = np.polyfit(lags, corr, 5)
+        # lag_interp = np.linspace(np.min(lags), np.max(lags), 20000)
+        # corr_interp = np.polyval(p, lag_interp)
+        # shift_out = lag_interp[np.argmax(corr_interp)]
+        
+        # plt.figure()
+        # plt.plot(lags, corr, '-k')
+        # plt.plot(lag_interp, corr_interp, lw=1)
+        # plt.xlabel('Lags')
+        # plt.ylabel('Correlation')
+        
+        # spec_corr = shift(spec1, shift=-shift_out, mode='nearest')
+        # new_wave_sol = shift(wave_sol, shift=shift_out, mode='nearest')
+        
+          
+        percent_ceil=80.0
+        sigdetect=20.0
+        sig_ceil=10.0
+        fwhm=8.0
+        
+        result_out, shift_out, stretch_out, stretch2_out, corr_out, shift_cc, corr_cc = \
+            xcorr_shift_stretch(spec, spec1, percent_ceil=percent_ceil, sig_ceil=sig_ceil,
+                                debug=False, sigdetect=sigdetect, fwhm=fwhm) 
+            
+        spec1_corr = shift_and_stretch(spec1, shift_out, stretch_out, stretch2_out)
+        # new_wave_sol = shift_and_stretch(wave_sol, shift_out, stretch_out, stretch2_out)
+        
+        nspec = spec1.size
+        old_x = np.arange(nspec)
+        new_x = np.arange(nspec)**2*stretch2_out + np.arange(nspec)*stretch_out + shift_out
+        # new_x = np.arange(nspec)
+        # old_x = np.arange(nspec)**2*stretch2_out + np.arange(nspec)*stretch_out + shift_out
+        new_wave_sol = interp1d(old_x, wave_sol, kind='quadratic',
+                                fill_value='extrapolate')(new_x)
+              
+        
+        np.savetxt('wavecal_solutions/'+c+'_'+str(fiber)+'.txt', new_wave_sol)  
+        
+        
+        # fig, ax = plt.subplots(nrows=2, figsize=(20,8), sharex=True)
+        # ax[0].set_ylabel('spec')
+        # ax[1].set_ylabel('spec1 / spec1_corr')
+        # ax[0].plot(spec)
+        # ax[1].plot(spec1)
+        # ax[1].plot(spec1_corr)
+        # ax[0].invert_xaxis()
+        # fig.subplots_adjust(hspace=0)
+        
+        # fig, ax = plt.subplots(nrows=2, figsize=(20,8), sharex=True)
+        # ax[0].set_ylabel('synth')
+        # ax[1].set_ylabel('spec1')
+        # ax[0].plot(wave, synth, '-k')
+        # ax[1].plot(new_wave_sol, spec1, '-'+c)
+        # fig.subplots_adjust(hspace=0)    
+    
+        # fig, ax = plt.subplots(nrows=2, figsize=(20,8), sharex=True)
+        # ax[0].set_ylabel('spec')
+        # ax[1].set_ylabel('spec1')
+        # ax[0].plot(wave_sol, spec, '-'+c)
+        # ax[1].plot(new_wave_sol, spec1, '-'+c)
+        # fig.subplots_adjust(hspace=0)      
+    
+        
+    

@@ -131,8 +131,7 @@ def extract_aper(exobj, LUT, aper):
     ypos = fibermap[:,3].astype('float') 
     
     spectra = []
-    
-    waves = wavecal()
+    waves = []
     
     for i, color in enumerate(['red', 'green', 'blue']):
         dist = (xpos-aper[i][0])**2 + (ypos-aper[i][1])**2
@@ -141,6 +140,7 @@ def extract_aper(exobj, LUT, aper):
         w_arr = []
         inds = np.nonzero(dist < aperture_radius)
         bench, fiber = fibermap[inds][:,:2].T
+        
         for j in range(len(bench)):
             hduidx = np.nonzero(detector == bench[j])[0][0]*3 + i
             counts = exobj['extractions'][hduidx].counts
@@ -217,7 +217,7 @@ def extract_aper(exobj, LUT, aper):
         
         
         
-    return spectra
+    return waves, spectra
         
     # inds = np.argsort(dist)
     # rbench, rfiber = fibermap[inds[0]][:2]      

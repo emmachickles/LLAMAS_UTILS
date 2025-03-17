@@ -14,20 +14,20 @@
 # filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_33_09.110_mef.fits'
 # filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_35_03.104_mef.fits'
 # filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_36_50.070_mef.fits'
-filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_38_36.523_mef.fits'
-aper = [[23.72, 23.65], [23.72, 23.65], [23.72, 23.65]]
-objname = 'J1013'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_38_36.523_mef.fits'
+# aper = [[23.72, 23.65], [23.72, 23.65], [23.72, 23.65]]
+# objname = 'J1013'
 
-# filepath = '/Users/emma/projects/llamas-data/ATLASJ1138/LLAMAS_2024-11-28T07_41_00.294_mef.fits'
-# aper = [[11.27, 19.1], [11.75, 20], [11.27, 20.87]]
-# skyaper = [[11.27+4, 19.1], [11.75+4, 20], [11.27+4, 20.87]]
-# objname = 'J1138'
+filepath = '/Users/emma/projects/llamas-data/ATLASJ1138/LLAMAS_2024-11-28T07_41_00.294_mef.fits'
+aper = [[11.27, 19.1], [11.75, 20], [11.27, 20.87]]
+skyaper = [[11.27+4, 19.1], [11.75+4, 20], [11.27+4, 20.87]]
+objname = 'J1138'
 
 
 choose_brightest = False
 
 
-out_dir = '/Users/emma/Desktop/work/250304/LLAMAS/'
+out_dir = '/Users/emma/Desktop/work/250317/'
 out_dir +=objname+'_'
 
 # -----------------------------------------------------------------------------
@@ -79,29 +79,31 @@ plot_whitelight(whitelight, aper)
 plt.savefig(out_dir+ext+'_whitelight.png', dpi=300)
 
 # Get spectra
-spectra = extract_fiber(exobj, LUT, aper)
-#sky = extract_fiber(exobj, LUT, skyaper)
-fig, ax = plt.subplots(nrows=3, figsize=(12,7))
-for i in range(3):
-    ax[i].plot(spectra[i], color=colors[i], label='Raw science',
-                alpha=0.5)
-    # ax[i].plot(sky[i], '-k', label='Sky')
-    # spectra[i] = spectra[i] - sky[i]
-    # ax[i].plot(spectra[i], alpha=0.5,
-    #             color='dark'+colors[i], label='Sky-subtracted science')
-    ax[i].set_ylabel('Counts')
-    ax[i].set_xlabel('Pixel')
-    ax[i].legend()
-
-# # Get sky-subtracted spectra
-# spectra = extract_aper(exobj, LUT, aper)
-
-# import pdb
-# pdb.set_trace()
-
+# spectra = extract_fiber(exobj, LUT, aper)
+# #sky = extract_fiber(exobj, LUT, skyaper)
+# fig, ax = plt.subplots(nrows=3, figsize=(12,7))
+# for i in range(3):
+#     ax[i].plot(spectra[i], color=colors[i], label='Raw science',
+#                 alpha=0.5)
+#     # ax[i].plot(sky[i], '-k', label='Sky')
+#     # spectra[i] = spectra[i] - sky[i]
+#     # ax[i].plot(spectra[i], alpha=0.5,
+#     #             color='dark'+colors[i], label='Sky-subtracted science')
+#     ax[i].set_ylabel('Counts')
+#     ax[i].set_xlabel('Pixel')
+#     ax[i].legend()
 
 # Estimate wavelength calibration
-waves = wavecal()
+# waves = wavecal()
+
+# Get sky-subtracted spectra
+waves, spectra = extract_aper(exobj, LUT, aper)
+
+import pdb
+pdb.set_trace()
+
+
+
 
 
 
