@@ -1,9 +1,9 @@
 # Based on lalmas_pyjamas/Tutorials/llamas_extraction_demo.ipynb
 
-# filepath = '/Users/emma/projects/llamas-data/standard/LLAMAS_2024-11-28T01_22_09.108_mef.fits'
-# aper = [[22.51, 22.73], [22.51, 22.73], [23.39, 23.73]]
-# skyaper = [[22.51+4, 22.73], [22.51+4, 22.73], [23.39+4, 23.73]]
-#objname = 'F110'
+filepath = '/Users/emma/projects/llamas-data/standard/LLAMAS_2024-11-28T01_22_09.108_mef.fits'
+aper = [[22.51, 22.73], [22.51, 22.73], [23.39, 23.73]]
+skyaper = [[22.51+4, 22.73], [22.51+4, 22.73], [23.39+4, 23.73]]
+objname = 'F110'
 
 # filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_22_09.466_mef.fits'
 # filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_24_06.175_mef.fits'
@@ -18,10 +18,10 @@
 # aper = [[23.72, 23.65], [23.72, 23.65], [23.72, 23.65]]
 # objname = 'J1013'
 
-filepath = '/Users/emma/projects/llamas-data/ATLASJ1138/LLAMAS_2024-11-28T07_41_00.294_mef.fits'
-aper = [[11.27, 19.1], [11.75, 20], [11.27, 20.87]]
-skyaper = [[11.27+4, 19.1], [11.75+4, 20], [11.27+4, 20.87]]
-objname = 'J1138'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1138/LLAMAS_2024-11-28T07_41_00.294_mef.fits'
+# aper = [[11.27, 19.1], [11.75, 20], [11.27, 20.87]]
+# skyaper = [[11.27+4, 19.1], [11.75+4, 20], [11.27+4, 20.87]]
+# objname = 'J1138'
 
 
 choose_brightest = False

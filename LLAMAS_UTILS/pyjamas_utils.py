@@ -4,17 +4,7 @@ aperture_radius = 2.5
 aperture_innersky = 3
 aperture_outersky = 4.5
 detector = np.array(['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B'])
-ulines = [4340.472, 4101.734, 3970.075, 3889.064, 3835.397]
-uwid   = [45,       45,       30,       25,       15]
-glines = [6562.79,  4861.35]
-gwid   = [60,       45]
-rlines = []
-rwid   = []
-# rlines = [9087]
-# rwid   = [60] 
 
-rlines = []
-rwid = []
 
 
 def get_fiber(whitelight):
@@ -226,6 +216,13 @@ def est_continuum(wave, flux, bins=100):
     from scipy.interpolate import interp1d
     from scipy.stats import binned_statistic
     import matplotlib.pyplot as plt
+
+    ulines = [4340.472, 4101.734, 3970.075, 3889.064, 3835.397]
+    uwid   = [45,       45,       30,       25,       15]
+    glines = [6562.79,  4861.35]
+    gwid   = [60,       45]
+    rlines = []
+    rwid   = []
 
     # Remove Balmer series 
     continuum_inds = np.ones(len(wave), dtype='bool')
