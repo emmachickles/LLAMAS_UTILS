@@ -25,7 +25,7 @@ r_extract_pickle = "/Users/emma/projects/llamas-pyjamas/llamas_pyjamas/output/LL
 ThArpath = "/Users/emma/projects/LLAMAS_UTILS/LLAMAS_UTILS/ThAr_lines.dat"
 # ThArpath = "/Users/emma/projects/LLAMAS_UTILS/LLAMAS_UTILS/ThAr_MagE_lines.dat"
 
-out_dir = "/Users/emma/Desktop/work/250310/"
+out_dir = "/Users/emma/Desktop/work/250414/"
 
 import numpy as np
 from scipy.signal import correlate, correlation_lags
@@ -41,7 +41,7 @@ from scipy.interpolate import interp1d
 plt.ion()
 
 # bench_list = np.array(['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B'])
-bench_list = np.array(['4B'])
+bench_list = np.array(['4A', '4B'])
 
 
 # # -- extract arc --------------------------------------------------------------
@@ -403,7 +403,7 @@ for bench in bench_list:
     green_hduidx = np.nonzero(bench_list == bench)[0][0]*3 + 1
     blue_hduidx = np.nonzero(bench_list == bench)[0][0]*3 + 2
     
-    for fiber in range(300):
+    for fiber in range(298):
         
         print(bench)
         print(fiber)
@@ -413,22 +413,22 @@ for bench in bench_list:
         # green_spec1 = g_exobj['extractions'][19].counts[fiber]
         # blue_spec1 = b_exobj['extractions'][20].counts[fiber]
         
-        if len(r_exobj['extractions'][red_hduidx].counts) >= fiber-1:
-            red_spec1 = r_exobj['extractions'][red_hduidx].counts[fiber]
+        # if len(r_exobj['extractions'][red_hduidx].counts) >= fiber-1:
+        #     red_spec1 = r_exobj['extractions'][red_hduidx].counts[fiber]
         if len(g_exobj['extractions'][green_hduidx].counts) >= fiber-1:
             green_spec1 = g_exobj['extractions'][green_hduidx].counts[fiber]
         if len(b_exobj['extractions'][blue_hduidx].counts) >= fiber-1:
             blue_spec1 = b_exobj['extractions'][blue_hduidx].counts[fiber]    
         
         for c in ['g', 'b']:
-            if c == 'r':
-                inds = red_inds
-                wave = red_wave
-                spec = red_spec
-                spec1 = red_spec1
-                synth = red_synth
-                wave_sol = red_wave_sol
-            elif c == 'g':
+            # if c == 'r':
+            #     inds = red_inds
+            #     wave = red_wave
+            #     spec = red_spec
+            #     spec1 = red_spec1
+            #     synth = red_synth
+            #     wave_sol = red_wave_sol
+            if c == 'g':
                 inds = green_inds
                 wave = green_wave
                 spec = green_spec
@@ -499,14 +499,16 @@ for bench in bench_list:
             np.savetxt('wavecal_solutions/'+c+'_'+bench+'_'+str(fiber)+'.txt', new_wave_sol)  
             
             
-            # fig, ax = plt.subplots(nrows=2, figsize=(20,8), sharex=True)
-            # ax[0].set_ylabel('spec')
-            # ax[1].set_ylabel('spec1 / spec1_corr')
-            # ax[0].plot(spec)
-            # ax[1].plot(spec1)
-            # ax[1].plot(spec1_corr)
-            # ax[0].invert_xaxis()
-            # fig.subplots_adjust(hspace=0)
+            fig, ax = plt.subplots(nrows=2, figsize=(20,8), sharex=True)
+            ax[0].set_ylabel('spec')
+            ax[1].set_ylabel('spec1 / spec1_corr')
+            ax[0].plot(spec)
+            ax[1].plot(spec1)
+            ax[1].plot(spec1_corr)
+            ax[0].invert_xaxis()
+            fig.subplots_adjust(hspace=0)
+            fig.savefig(out_dir+c+'_'+bench+'_'+str(fiber)+'_spec.png', dpi=300)
+            plt.close()
             
             # fig, ax = plt.subplots(nrows=2, figsize=(20,8), sharex=True)
             # ax[0].set_ylabel('synth')
