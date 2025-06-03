@@ -1,3 +1,10 @@
+*.hst
+*.DS_Store
+*.png
+*.dat
+*.Xshooterspec
+
+
 # Big files
 mastercalib/
 

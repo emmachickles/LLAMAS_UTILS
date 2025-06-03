@@ -5,7 +5,50 @@ aperture_innersky = 3.5
 aperture_outersky = 4.5
 detector = np.array(['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B'])
 
-def get_fiber(whitelight):
+def load_arc_pkl():
+    from llamas_pyjamas.config import BASE_DIR
+    import pickle, os
+
+    arc_filepath = os.path.join(BASE_DIR, 'Arc', 'LLAMAS_reference_arc.pkl')
+    with open(arc_filepath, 'rb') as f:
+        arc = pickle.load(f)
+    return arc
+
+def load_LUT():
+    from llamas_pyjamas.config import LUT_DIR
+    import os
+    from astropy.table import Table 
+    fibre_map_path = os.path.join(LUT_DIR, 'LLAMAS_FiberMap_rev02.dat')
+    fibermap_lut = Table.read(fibre_map_path, format='ascii.fixed_width')
+    return fibermap_lut
+
+def extract_fiber_by_fibnum(exobj, arc, color, bench, fiber):
+
+    if color == 'r':
+        color = 'red'
+    if color == 'g':
+        color = 'green'
+    if color == 'b':
+        color = 'blue'
+
+    metadata_channel = np.array([chan['channel'] for chan in exobj['metadata']])
+    metadata_bench = np.array([chan['bench'] for chan in exobj['metadata']]).astype('int')
+    metadata_side = np.array([chan['side'] for chan in exobj['metadata']])
+
+    hduidx = np.nonzero( (metadata_channel==color) * \
+                        (metadata_bench==int(bench[0])) * \
+                        (metadata_side==bench[1]))[0][0]
+    # hduidx = np.nonzero(detector == bench)[0][0]*3 + color
+
+    counts = exobj['extractions'][hduidx].counts
+    counts = counts[int(fiber)]
+
+    waves = arc['extractions'][hduidx].wave[int(fiber)]
+
+    return waves, counts
+
+
+def get_brightest_pix(whitelight):
     aper = []
     
     for i in [5,3,1]:
@@ -18,9 +61,7 @@ def get_fiber(whitelight):
     
     return aper
 
-
-
-def plot_whitelight(whitelight, aper):
+def plot_whitelight(whitelight, x, y):
 
     from astropy.io import fits
     import matplotlib.pyplot as plt
@@ -28,42 +69,115 @@ def plot_whitelight(whitelight, aper):
 
     fig, ax = plt.subplots(figsize=(20,5), ncols=3)
     ax[0].set_title(whitelight[5].header['EXTNAME'])
-    ax[0].imshow(np.fliplr(whitelight[5].data), origin='lower', aspect='equal',
+    ax[0].imshow(whitelight[5].data, origin='lower', aspect='equal',
                  extent=[0, 80/1.5, 0, 80/1.5])
     ax[1].set_title(whitelight[3].header['EXTNAME'])
-    ax[1].imshow(np.fliplr(whitelight[3].data), origin='lower', aspect='equal',
+    ax[1].imshow(whitelight[3].data, origin='lower', aspect='equal',
                  extent=[0, 80/1.5, 0, 80/1.5])
     ax[2].set_title(whitelight[1].header['EXTNAME'])
-    ax[2].imshow(np.fliplr(whitelight[1].data), origin='lower', aspect='equal',
+    ax[2].imshow(whitelight[1].data, origin='lower', aspect='equal',
                  extent=[0, 80/1.5, 0, 80/1.5])
     for i in range(3):        
-        ax[i].plot([aper[i][0]], [aper[i][1]], '.m')
-        circle = patches.Circle((aper[i][0],aper[i][1]), aperture_radius,
+        ax[i].plot([x], [y], '.m')
+        circle = patches.Circle((x, y), aperture_radius,
                                 ec='m', fc='none')
         ax[i].add_patch(circle)
-        circle = patches.Circle((aper[i][0],aper[i][1]), aperture_innersky,
+        circle = patches.Circle((x, y), aperture_innersky,
                                 ec='k', fc='none')
         ax[i].add_patch(circle)
-        circle = patches.Circle((aper[i][0],aper[i][1]), aperture_outersky,
+        circle = patches.Circle((x, y), aperture_outersky,
                                 ec='k', fc='none')
         ax[i].add_patch(circle)    
 
         ax[i].set_xlabel('xpos')
         ax[i].set_ylabel('ypos')     
 
+def plot_fiber_intensity_map(exobj, fibermap, arc, x, y, out_dir):
 
-    # fibermap = np.genfromtxt(LUT, delimiter='|', dtype=None, autostrip=True,
-    #                          usecols=(1,2,5,6)).astype('str')[1:]
-    # bench = fibermap[:,0]
-    # fiber = fibermap[:,1]
-    # xpos = fibermap[:,2].astype('float')
-    # ypos = fibermap[:,3].astype('float') 
-    # for i in range(3):
-    #     for j in range(len(fibermap)):
-    #         ax[i].text(xpos[j], ypos[j], fiber[j]+' '+bench[j], color='k', fontsize=4)
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as patches
 
+    fig, ax = plt.subplots(figsize=(20,5), ncols=3)
 
+    for i, color in enumerate(['r', 'g', 'b']):
         
+        sumcnts = [] 
+        xpos_cnts = []
+        ypos_cnts = []
+        for fib in range(len(fibermap)):
+            try:
+                _, counts = extract_fiber_by_fibnum(exobj, arc, color, fibermap['bench'][fib], fibermap['fiber'][fib])
+                sumcnts.append( np.nansum(counts) )
+                xpos_cnts.append(fibermap['xpos'][fib])
+                ypos_cnts.append(fibermap['ypos'][fib])
+            except:
+                pass
+
+        ax[i].set_title(color)
+        ax[i].scatter(xpos_cnts, ypos_cnts, c=sumcnts, cmap='viridis', marker='s', s=10)
+        ax[i].plot([x], [y], '.m')
+        circle = patches.Circle((x, y), aperture_radius,
+                                ec='m', fc='none')
+        ax[i].add_patch(circle)
+        circle = patches.Circle((x, y), aperture_innersky,
+                                ec='k', fc='none')
+        ax[i].add_patch(circle)
+        circle = patches.Circle((x, y), aperture_outersky,
+                                ec='k', fc='none')
+        ax[i].add_patch(circle)
+        ax[i].set_xlabel('xpos')
+        ax[i].set_ylabel('ypos')  
+    fig.savefig(out_dir+'fiber_intensity.png', dpi=300)        
+        
+def plot_local_fiber_intensity(exobj, fibermap, arc, x, y, out_dir, rad=6.):
+
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as patches
+
+    fig, ax = plt.subplots(figsize=(8,3), ncols=3)
+
+    for i, color in enumerate(['r', 'g', 'b']):
+        sumcnts = []
+        xpos_cnts = []
+        ypos_cnts = []
+
+        # Select fibers within the square region
+        in_square = np.where(
+            (fibermap['xpos'] >= x - rad) & \
+            (fibermap['xpos'] <= x + rad) & \
+            (fibermap['ypos'] >= y - rad) & \
+            (fibermap['ypos'] <= y + rad)
+        )[0]
+
+
+
+        for fib in in_square:
+            print(fib)
+            _, counts = extract_fiber_by_fibnum(exobj, arc, color, fibermap['bench'][fib], fibermap['fiber'][fib])
+            sumcnts.append(np.nansum(counts))
+            xpos_cnts.append(fibermap['xpos'][fib])
+            ypos_cnts.append(fibermap['ypos'][fib])
+
+    
+        ax[i].set_title(color)
+        sc = ax[i].scatter(xpos_cnts, ypos_cnts, c=sumcnts, cmap='viridis', marker='s', s=30)
+        for xpos, ypos, fib in zip(xpos_cnts, ypos_cnts, in_square):
+            ax[i].text(xpos, ypos, f'{fibermap['bench'][fib]}\n{fibermap['fiber'][fib]}', color='black', fontsize=3, ha='center', va='center')        
+        ax[i].plot([x], [y], '.m')
+        circle = patches.Circle((x, y), aperture_radius, ec='m', fc='none')
+        ax[i].add_patch(circle)
+        circle = patches.Circle((x, y), aperture_innersky, ec='k', fc='none')
+        ax[i].add_patch(circle)
+        circle = patches.Circle((x, y), aperture_outersky, ec='k', fc='none')
+        ax[i].add_patch(circle)
+        ax[i].set_xlim(x - rad, x + rad)
+        ax[i].set_ylim(y - rad, y + rad)
+        ax[i].set_xlabel('xpos')
+        ax[i].set_ylabel('ypos')
+
+    fig.tight_layout()
+    fig.savefig(out_dir + 'fiber_intensity_loc.png', dpi=300)
+
 def run_extract(filepath):
     import os
     import ray
@@ -101,36 +215,24 @@ def run_extract(filepath):
     # Run extraction process
     GUI_extract(filepath)
     
-def extract_fiber(exobj, LUT, aper):
+def extract_fiber_by_pos(exobj, fibermap, arc, x, y):
     
-    # Columns: bench, fiber, xpos, ypos
-    fibermap = np.genfromtxt(LUT, delimiter='|', dtype=None, autostrip=True,
-                             usecols=(1,2,5,6)).astype('str')[1:]
-    xpos = fibermap[:,2].astype('float')
-    ypos = fibermap[:,3].astype('float') 
-    
-    waves = []
-    spectra = []
+    spec = {}
     for i, c in enumerate(['r', 'g', 'b']):
-        dist = (xpos-aper[i][0])**2 + (ypos-aper[i][1])**2
+        dist = (fibermap['xpos']-x)**2 + (fibermap['ypos']-y)**2
         inds = np.argsort(dist)
-        bench, fiber = fibermap[inds[0]][:2]    
+        bench, fiber = fibermap[inds[0]]['bench'], fibermap[inds[0]]['fiber']
+        print(bench, fiber)
         hduidx = np.nonzero(detector == bench)[0][0]*3 + i
         counts = exobj['extractions'][hduidx].counts
-        color = exobj['extractions'][hduidx].channel
-        if i == 2:
-            counts = np.flipud(counts)    
-        spectra.append(counts[int(fiber)])
-        
-        if c == 'g' or c == 'b':
-            waves.append(np.loadtxt('wavecal_solutions/'+c+'_'+bench+'_'+fiber+'.txt'))
-        else:
-            waves.append(np.linspace(9800, 6900, 2048))
+        waves = arc['extractions'][hduidx].wave
 
-    return np.array(waves), np.array(spectra)
+        spec[c] = {'wave': waves[int(fiber)], 'spectrum': counts[int(fiber)]}
+
+    return spec
         
     
-def extract_aper(exobj, LUT, aper, waves, sky, out_dir):
+def extract_aper_backup(exobj, LUT, aper, out_dir):
     import os
     import matplotlib.pyplot as plt
     import matplotlib.patches as patches
@@ -144,208 +246,186 @@ def extract_aper(exobj, LUT, aper, waves, sky, out_dir):
     xpos = fibermap[:,2].astype('float')
     ypos = fibermap[:,3].astype('float') 
 
-    spectra = []
+    waves = [] # r, g, b
+    sky_spectra = [] 
+    sci_spectra = []
     
     for i, color in enumerate(['r', 'g', 'b']):
+
+        # Identify fibers in the science aperture and sky annulus
         dist = np.sqrt((xpos-aper[i][0])**2 + (ypos-aper[i][1])**2)
-        inds = np.nonzero(dist < aperture_radius)[0]
+        aper_inds = np.nonzero(dist < aperture_radius)[0]
+        annul_inds = np.nonzero((dist > aperture_innersky) * (dist < aperture_outersky))[0]
         
         # Check wavelength solution exists (sometimes missing fibers e.g. 4A Fiber 298)
         if color == 'g' or color == 'b':
-            inds = [ind for ind in inds if os.path.exists('wavecal_solutions/'+color+'_'+bench[ind]+'_'+fiber[ind]+'.txt')]
+            aper_inds = [ind for ind in aper_inds if os.path.exists('wavecal_solutions/'+color+'_'+bench[ind]+'_'+fiber[ind]+'.txt')]
+            annul_inds = [ind for ind in annul_inds if os.path.exists('wavecal_solutions/'+color+'_'+bench[ind]+'_'+fiber[ind]+'.txt')]
         
-        aper_arr = []
-        w_arr = []        
-        for j in range(len(inds)):
+        # Get total counts of fibers in the aperture
+        sumcnts = []
+        for j in range(len(aper_inds)):
+            counts = get_fiber(exobj, color, bench[aper_inds[j]], fiber[aper_inds[j]])
+            sumcnts.append(np.nansum(counts))
+        sumcnts = np.array(sumcnts)
+        
+        # Get the wavelength grid of the brightest fiber
+        max_ind = aper_inds[ np.nanargmax(sumcnts) ]
+        if color == 'g' or color == 'b':
+            wave_template = np.loadtxt('wavecal_solutions/'+color+'_'+bench[max_ind]+'_'+fiber[max_ind]+'.txt')
+        else:
+            wave_template = np.linspace(9800, 6900, 2048)
+        waves.append(wave_template)
 
-            hduidx = np.nonzero(detector == bench[inds[j]])[0][0]*3 + i
-            counts = exobj['extractions'][hduidx].counts
-            if i == 2:
-                counts = np.flipud(counts)
-            counts = counts[int(fiber[inds[j]])]
-
+        # Interpolate sky spectra to match science wavelength grid
+        sky_counts = []
+        for j, fib in enumerate(annul_inds):
+            counts = get_fiber(exobj, color, bench[fib], fiber[fib])
             if color == 'g' or color == 'b':
-                wave = np.loadtxt('wavecal_solutions/'+color+'_'+bench[inds[j]]+'_'+fiber[inds[j]]+'.txt')
+                wave = np.loadtxt('wavecal_solutions/'+color+'_'+bench[fib]+'_'+fiber[fib]+'.txt')
+            else:
+                wave = np.linspace(9800, 6900, 2048)
+
+            interp_counts = interp1d(wave, counts, kind='linear', fill_value=np.nan, bounds_error=False)
+            sky_counts.append(interp_counts(wave_template))
+        sky_counts = np.array(sky_counts)
+        sky_spectra.append( np.nanmedian(sky_counts, axis=0) )
+
+        # Plot sky extraction
+        nrows = 4
+        fig, ax = plt.subplots(nrows=nrows+1, ncols=2, figsize=(12,10), width_ratios=[1, 0.2])
+        ax[0][0].plot(wave_template, sky_spectra[i], c=color, label='Median')
+        ax[0][0].legend(loc='upper right')
+        # fib_inds = range(nrows)
+        fib_inds = [0,5,10,15]
+        for row, fib in enumerate(fib_inds):
+            ax[row+1][0].plot(wave_template, sky_counts[fib], c=color,
+                              label='Bench {}, Fiber {}'.format(bench[annul_inds[fib]],
+                                                                fiber[annul_inds[fib]]))
+            ax[row+1][0].legend(loc='upper right')
+            ax[row+1][0].set_xlim(ax[0][0].get_xlim())
+            ax[row+1][0].set_ylim(ax[0][0].get_ylim())
+        ax[-1][0].set_xlabel('Wavelength (Å)')            
+
+        # Plot sky fiber positions
+        img_inds = np.nonzero( (xpos>aper[i][0]-aperture_outersky-1) *\
+                            (xpos<aper[i][0]+aperture_outersky+1) *\
+                            (ypos>aper[i][1]-aperture_outersky-1) *\
+                            (ypos<aper[i][1]+aperture_outersky+1))[0]        
+        xpos_img = xpos[img_inds]
+        ypos_img = ypos[img_inds]
+        cnts_img = []
+        for j, fib in enumerate(img_inds):
+            counts = get_fiber(exobj, color, bench[fib], fiber[fib])
+            cnts_img.append( np.nansum(counts) )
+        for row, fib in enumerate(fib_inds):
+            ax[row+1][1].scatter(xpos_img, ypos_img, c=cnts_img, cmap='viridis', marker='s', s=50)
+            ax[row+1][1].plot([aper[i][0]], [aper[i][1]], '.m')
+            circle = patches.Circle((aper[i][0],aper[i][1]), aperture_radius,
+                                    ec='m', fc='none')
+            ax[row+1][1].add_patch(circle)
+            circle = patches.Circle((aper[i][0],aper[i][1]), aperture_innersky,
+                                    ec='k', fc='none')
+            ax[row+1][1].add_patch(circle)
+            circle = patches.Circle((aper[i][0],aper[i][1]), aperture_outersky,
+                                    ec='k', fc='none')
+            ax[row+1][1].add_patch(circle)                
+            rect = patches.Rectangle((xpos[annul_inds[fib]] - 0.5, ypos[annul_inds[fib]] - 0.5), 1, 1,
+                                    linewidth=2, edgecolor='red', facecolor='none')
+            ax[row+1][1].add_patch(rect)
+        ax[0][1].axis('off')
+        ax[2][0].set_ylabel('Counts')
+        plt.subplots_adjust(hspace=0)
+        fig.savefig(out_dir+color+'_sky.png', dpi=300)
+
+        sci_counts = []
+        w_arr = []        
+        for j, fib in enumerate(aper_inds):
+            counts = get_fiber(exobj, color, bench[fib], fiber[fib])
+            if color == 'g' or color == 'b':
+                wave = np.loadtxt('wavecal_solutions/'+color+'_'+bench[aper_inds[j]]+'_'+fiber[aper_inds[j]]+'.txt')
             else:
                 wave =  np.linspace(9800, 6900, 2048)
-            interp_counts = interp1d(wave, counts, kind='linear',
-                                            fill_value='extrapolate')
+
+            interp_counts = interp1d(wave, counts, kind='linear', fill_value=np.nan, bounds_error=False)
+            counts = interp_counts(wave_template)
+            skysub_counts = counts - sky_spectra[i]
             
-            counts = interp_counts(waves[i])
-            skysub_counts = counts - sky[i]
-            
-            aper_arr.append(skysub_counts)
+            sci_counts.append(skysub_counts)
             w_arr.append(np.nansum(skysub_counts))
 
-        aper_arr = np.array(aper_arr)
+        sci_counts = np.array(sci_counts)
         w_arr = np.array(w_arr)
         w_arr = w_arr / np.sum(w_arr)        
         w_arr = np.repeat(np.expand_dims(w_arr, 1), 2048, axis=1)
         
-        weighted_sum = np.nansum(aper_arr * w_arr, axis=0)  # Weighted sum
-        normalization = np.nansum(w_arr * ~np.isnan(aper_arr), axis=0)  # Sum of valid weights
-        
+        weighted_sum = np.nansum(sci_counts * w_arr, axis=0)  # Weighted sum
+        normalization = np.nansum(w_arr * ~np.isnan(sci_counts), axis=0)  # Sum of valid weights
         avg_counts = weighted_sum / normalization  # Final weighted mean        
 
-        spectra.append(avg_counts)
+        sci_spectra.append(avg_counts)
 
-        fig, ax = plt.subplots(figsize=(12,5))
-        ax.plot(waves[i], avg_counts, c=color)
-        ax.set_xlabel('Wavelength (Å)')
-        ax.set_ylabel('Counts')
-        fig.savefig(out_dir+color+'_aper_add.png', dpi=300)
-
-        nrows = 5
+        # Plot science aperture extraction
+        nrows = 4
         sorted_inds = np.argsort(w_arr[:,0])[::-1]
-        fig, ax = plt.subplots(figsize=(12,10), nrows=nrows, ncols=2, width_ratios=[1,0.2])
-        plt.suptitle(color+' target aperture')
-        for row, spec in enumerate(sorted_inds[:nrows]):
+        fig, ax = plt.subplots(figsize=(12,10), nrows=nrows+1, ncols=2, width_ratios=[1,0.2])
+        ax[0][0].plot(wave_template, avg_counts, c=color, label='Weighted mean')
+        ax[0][0].legend(loc='upper right')
+        for row, fib in enumerate(sorted_inds[:nrows]):
             # [j].plot(aper_arr[j], c=color)
-            ax[row][0].plot(waves[i], aper_arr[spec], c=color)            
-            ax[row][0].text(0.05, 0.95, 'Weight: '+str(np.round(w_arr[spec][0], 4)),
-                        transform=ax[row][0].transAxes, ha='left', va='top')
+            ax[row+1][0].plot(wave_template, sci_counts[fib], c=color,
+                            label='Bench {}, Fiber {}'.format(bench[aper_inds[fib]],
+                                                              fiber[aper_inds[fib]]))            
+            ax[row+1][0].text(0.05, 0.95, 'Weight: '+str(np.round(w_arr[fib][0], 4)),
+                        transform=ax[row+1][0].transAxes, ha='left', va='top')
+            ax[row+1][0].legend(loc='upper right')
+            ax[row+1][0].set_xlim(ax[0][0].get_xlim())
         ax[2][0].set_ylabel('Counts')
-        # ax[-1].set_xlabel('Pixel')
         ax[-1][0].set_xlabel('Wavelength (Å)')        
-        inds_img = np.nonzero( (xpos>aper[i][0]-aperture_outersky) *\
-                           (xpos<aper[i][0]+aperture_outersky) *\
-                           (ypos>aper[i][1]-aperture_outersky) *\
-                            (ypos<aper[i][1]+aperture_outersky))[0]
-        xpos_img = xpos[inds_img]  
-        ypos_img = ypos[inds_img]
-        cnts_img = []
-        for j in range(len(inds_img)):
-            hduidx = np.nonzero(detector == bench[inds_img[j]])[0][0]*3 + i
-            counts = exobj['extractions'][hduidx].counts
-            if color == 'b':
-                counts = np.flipud(counts)
-            counts = counts[int(fiber[inds_img[j]])]
-            cnts_img.append(np.nansum(counts))
-        for row, spec in enumerate(sorted_inds[:nrows]):
-            ax[row][1].scatter(xpos_img, ypos_img, c=cnts_img, cmap='viridis', marker='s', s=50)
-            ax[row][1].plot([aper[i][0]], [aper[i][1]], '.m')
+
+        # Plot science fiber positions
+        for row, fib in enumerate(sorted_inds[:nrows]):
+            ax[row+1][1].scatter(xpos_img, ypos_img, c=cnts_img, cmap='viridis', marker='s', s=50)
+            ax[row+1][1].plot([aper[i][0]], [aper[i][1]], '.m')
             circle = patches.Circle((aper[i][0],aper[i][1]), aperture_radius,
                                     ec='m', fc='none')
-            ax[row][1].add_patch(circle)
+            ax[row+1][1].add_patch(circle)
             circle = patches.Circle((aper[i][0],aper[i][1]), aperture_innersky,
                                     ec='k', fc='none')
-            ax[row][1].add_patch(circle)
+            ax[row+1][1].add_patch(circle)
             circle = patches.Circle((aper[i][0],aper[i][1]), aperture_outersky,
                                     ec='k', fc='none')
-            ax[row][1].add_patch(circle)                
-            rect = patches.Rectangle((xpos[inds[spec]] - 0.5, ypos[inds[spec]] - 0.5), 1, 1,
+            ax[row+1][1].add_patch(circle)                
+            rect = patches.Rectangle((xpos[aper_inds[fib]] - 0.5, ypos[aper_inds[fib]] - 0.5), 1, 1,
                                     linewidth=2, edgecolor='red', facecolor='none')
-            ax[row][1].add_patch(rect)   
-        # plt.subplots_adjust(hspace=0)
-        fig.savefig(out_dir+color+'_aper.png', dpi=300)
+            ax[row+1][1].add_patch(rect)   
+        ax[0][1].axis('off')
+        plt.subplots_adjust(hspace=0)
+        fig.savefig(out_dir+color+'_science.png', dpi=300)
         
-    return spectra
-        
-    # inds = np.argsort(dist)
-    # rbench, rfiber = fibermap[inds[0]][:2]      
+    return waves, sci_spectra
+          
+def extract_sky(exobj, fibermap, arc, x_sci, y_sci, spec_sci):
 
-def extract_sky(exobj, LUT, aper, out_dir):
-
-    import os
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as patches
     from scipy.interpolate import interp1d
 
-    # Columns: bench, fiber, xpos, ypos
-    fibermap = np.genfromtxt(LUT, delimiter='|', dtype=None, autostrip=True,
-                             usecols=(1,2,5,6)).astype('str')[1:]
-    bench = fibermap[:,0]
-    fiber = fibermap[:,1]
-    xpos = fibermap[:,2].astype('float')
-    ypos = fibermap[:,3].astype('float')     
+    # Identify fibers in the sky annulus
+    dist = np.sqrt((fibermap['xpos']-x_sci)**2 + (fibermap['ypos']-y_sci)**2)
+    annul_inds = np.nonzero((dist > aperture_innersky) * (dist < aperture_outersky))[0]            
+    print(len(annul_inds), 'fibers in the sky annulus')
 
-    spectra = []
-    waves = []
+    # Interpolate sky spectra to match science wavelength grid
+    spec_sky = {}
+    for i, c in enumerate(['r', 'g', 'b']):
+        annul_cnts = []
+        for j, fib in enumerate(annul_inds):
+            wave, cnts = extract_fiber_by_fibnum(exobj, arc, c, fibermap['bench'][fib], fibermap['fiber'][fib])
+            interp_func = interp1d(wave, cnts, kind='linear', fill_value=np.nan, bounds_error=False)
+            annul_cnts.append(interp_func(spec_sci[c]['wave']))
+        annul_cnts = np.array(annul_cnts)
+        spec_sky[c] = {'spectrum': np.nanmedian(annul_cnts, axis=0)}
+    return spec_sky
 
-    for i, color in enumerate(['r', 'g', 'b']):
-        
-        dist = np.sqrt((xpos-aper[i][0])**2 + (ypos-aper[i][1])**2)
-        inds = np.nonzero( (dist<aperture_outersky) *\
-                           (dist>aperture_innersky))[0]
-        
-        # Check wavelength solution exists
-        if color == 'g' or color == 'b':
-            inds = [ind for ind in inds if os.path.exists('wavecal_solutions/'+color+'_'+bench[ind]+'_'+fiber[ind]+'.txt')]
-
-        # Get counts
-        counts_arr = []
-        for j in range(len(inds)):
-            hduidx = np.nonzero(detector == bench[inds[j]])[0][0]*3 + i
-            counts = exobj['extractions'][hduidx].counts
-            if color == 'b':
-                counts = np.flipud(counts)
-            counts = counts[int(fiber[inds[j]])]
-
-            if color == 'g' or color == 'b':
-                wave = np.loadtxt('wavecal_solutions/'+color+'_'+bench[inds[j]]+'_'+fiber[inds[j]]+'.txt')
-            else:
-                wave = np.linspace(9800, 6900, 2048)
-            
-            if j == 0:
-                wave_template = wave
-            else:
-                counts = interp1d(wave, counts, kind='nearest', fill_value='extrapolate')(wave_template)
-
-            counts_arr.append(counts)
-
-        # Interpolate sky spectrum to match science wavelength grid
-
-        waves.append(wave_template)
-        counts_arr = np.array(counts_arr)
-        sky_counts = np.nanmedian(counts_arr, axis=0)
-        spectra.append(sky_counts)
-
-        fig, ax = plt.subplots(figsize=(12,5))
-        ax.plot(wave_template, sky_counts, c=color)
-        ax.set_xlabel('Wavelength (Å)')
-        ax.set_ylabel('Counts')
-        fig.savefig(out_dir+color+'_sky_median.png', dpi=300)
-
-        nrows = 5
-        fig, ax = plt.subplots(nrows=nrows, ncols=2, figsize=(12,10), width_ratios=[1, 0.2])
-        for j in range(nrows):
-            ax[j][0].plot(wave_template, counts_arr[j], c=color)
-            ax[j][0].plot(wave_template, sky_counts, '--k', lw=1)
-        ax[-1][0].set_xlabel('Wavelength (Å)')
-        inds_img = np.nonzero( (xpos>aper[i][0]-aperture_outersky) *\
-                           (xpos<aper[i][0]+aperture_outersky) *\
-                           (ypos>aper[i][1]-aperture_outersky) *\
-                            (ypos<aper[i][1]+aperture_outersky))[0]
-        xpos_img = xpos[inds_img]  
-        ypos_img = ypos[inds_img]
-        cnts_img = []
-        for j in range(len(inds_img)):
-            hduidx = np.nonzero(detector == bench[inds_img[j]])[0][0]*3 + i
-            counts = exobj['extractions'][hduidx].counts
-            if color == 'b':
-                counts = np.flipud(counts)
-            counts = counts[int(fiber[inds_img[j]])]
-            cnts_img.append(np.nansum(counts))
-        for j in range(nrows):
-            ax[j][1].scatter(xpos_img, ypos_img, c=cnts_img, cmap='viridis', marker='s', s=50)
-            ax[j][1].plot([aper[i][0]], [aper[i][1]], '.m')
-            circle = patches.Circle((aper[i][0],aper[i][1]), aperture_radius,
-                                    ec='m', fc='none')
-            ax[j][1].add_patch(circle)
-            circle = patches.Circle((aper[i][0],aper[i][1]), aperture_innersky,
-                                    ec='k', fc='none')
-            ax[j][1].add_patch(circle)
-            circle = patches.Circle((aper[i][0],aper[i][1]), aperture_outersky,
-                                    ec='k', fc='none')
-            ax[j][1].add_patch(circle)                
-            rect = patches.Rectangle((xpos[inds[j]] - 0.5, ypos[inds[j]] - 0.5), 1, 1,
-                                    linewidth=2, edgecolor='red', facecolor='none')
-            ax[j][1].add_patch(rect)            
-        # plt.subplots_adjust(hspace=0)
-        fig.savefig(out_dir+color+'_sky.png', dpi=300)
-
-    return waves, spectra
-        
 
 def est_continuum(wave, flux, bins=100):
     from scipy.interpolate import interp1d
@@ -399,11 +479,11 @@ def est_sensfunc():
     from numpy.polynomial.polynomial import Polynomial
     from scipy.signal import savgol_filter
     
-    hstspec = np.loadtxt('/Users/emma/projects/LLAMAS_UTILS/LLAMAS_UTILS/ffeige110.dat')
+    hstspec = np.loadtxt('/Users/emma/work/LLAMAS_UTILS/LLAMAS_UTILS/ffeige110.dat')
     
-    rspec = np.loadtxt('/Users/emma/Desktop/work/250214/F110_LLAMAS_2024-11-28T01_22_09.108_red_counts.txt')
-    gspec = np.loadtxt('/Users/emma/Desktop/work/250214/F110_LLAMAS_2024-11-28T01_22_09.108_green_counts.txt')
-    uspec = np.loadtxt('/Users/emma/Desktop/work/250214/F110_LLAMAS_2024-11-28T01_22_09.108_blue_counts.txt')
+    rspec = np.loadtxt('/Users/emma/Desktop/plots/250214/F110_LLAMAS_2024-11-28T01_22_09.108_red_counts.txt')
+    gspec = np.loadtxt('/Users/emma/Desktop/plots/250214/F110_LLAMAS_2024-11-28T01_22_09.108_green_counts.txt')
+    uspec = np.loadtxt('/Users/emma/Desktop/plots/250214/F110_LLAMAS_2024-11-28T01_22_09.108_blue_counts.txt')
     
     # # Deal with negative values
     # inds = np.nonzero(rspec[:,1] < 1)
@@ -456,31 +536,31 @@ def est_sensfunc():
     
     # -------------------------------------------------------------------------
     
-    fig, ax = plt.subplots(figsize=(20, 7), nrows=2, ncols=3)
+    fig, ax = plt.subplots(figsize=(20, 7), nrows=3, ncols=3)
     plt.suptitle('Sensitivity in red channel')
     
     ax[0][2].plot(rspec[:,0], rspec[:,1], '-r', label='Raw LLAMAS spectrum')
     ylim = ax[0][0].get_ylim()
-    ax[0][2].plot(rspec[:,0], r_response*1000, '-k', label='scaled Sensitivity')
-    ax[0][2].set_ylim(ylim)
-    ax[1][2].plot(rspec[:,0], hstmap(rspec[:,0])+500, '-k', label='HST Spectrum')
-    ax[1][2].plot(rspec[:,0], r_response*rspec[:,1], '--r',
+    ax[1][2].plot(rspec[:,0], r_response, '-k', label='Sensitivity')
+    # ax[0][2].set_ylim(ylim)
+    ax[2][2].plot(rspec[:,0], hstmap(rspec[:,0]), '-k', label='HST Spectrum')
+    ax[2][2].plot(rspec[:,0], r_response*rspec[:,1], '--r',
                   label='Flux-calibrated LLAMAS spectrum')
       
     ax[0][1].plot(gspec[:,0], gspec[:,1], '-g', label='Raw LLAMAS spectrum')
     ylim = ax[0][1].get_ylim()
-    ax[0][1].plot(gspec[:,0], g_response*1000, '-k', label='scaled Sensitivity')
-    ax[0][1].set_ylim(ylim)
-    ax[1][1].plot(gspec[:,0], hstmap(gspec[:,0])+500, '-k', label='HST Spectrum')
-    ax[1][1].plot(gspec[:,0], g_response*gspec[:,1], '--g',
+    ax[1][1].plot(gspec[:,0], g_response, '-k', label='Sensitivity')
+    # ax[0][1].set_ylim(ylim)
+    ax[2][1].plot(gspec[:,0], hstmap(gspec[:,0]), '-k', label='HST Spectrum')
+    ax[2][1].plot(gspec[:,0], g_response*gspec[:,1], '--g',
                   label='Flux-calibrated LLAMAS spectrum')
 
     ax[0][0].plot(uspec[:,0], uspec[:,1], '-b', label='Raw LLAMAS spectrum')
     ylim = ax[0][2].get_ylim()
-    ax[0][0].plot(uspec[:,0], u_response*1000, '-k', label='scaled Sensitivity')
-    ax[0][0].set_ylim(ylim)
-    ax[1][0].plot(uspec[:,0], hstmap(uspec[:,0])+500, '-k', label='HST Spectrum')
-    ax[1][0].plot(uspec[:,0], u_response*uspec[:,1], '--b', 
+    ax[1][0].plot(uspec[:,0], u_response, '-k', label='scaled Sensitivity')
+    # ax[0][0].set_ylim(ylim)
+    ax[2][0].plot(uspec[:,0], hstmap(uspec[:,0]), '-k', label='HST Spectrum')
+    ax[2][0].plot(uspec[:,0], u_response*uspec[:,1], '--b', 
                   label='Flux-calibrated LLAMAS spectrum')    
 
 

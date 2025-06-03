@@ -1,11 +1,16 @@
 # Based on lalmas_pyjamas/Tutorials/llamas_extraction_demo.ipynb
 
+out_dir = '/Users/emma/Desktop/work/250528/'
+
+# filepath = '/Users/emma/projects/llamas-data/GD108/LLAMAS_2025-03-06T00_15_52.794_mef.fits'
+# aper = [[23.01, 25.55], [23.01, 25.55], [34.07, 25.98]]
+# objname = 'GD108'
+
 # filepath = '/Users/emma/projects/llamas-data/standard/LLAMAS_2024-11-28T01_22_09.108_mef.fits'
 # aper = [[22.51, 22.73], [22.51, 22.73], [23.39, 23.73]]
-# skyaper = [[22.51+4, 22.73], [22.51+4, 22.73], [23.39+4, 23.73]]
 # objname = 'F110'
 
-filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_22_09.466_mef.fits'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_22_09.466_mef.fits'
 # filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_24_06.175_mef.fits'
 # filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_25_54.028_mef.fits'
 # filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_27_44.893_mef.fits'
@@ -14,11 +19,39 @@ filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_22_
 # filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_33_09.110_mef.fits'
 # filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_35_03.104_mef.fits'
 # filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_36_50.070_mef.fits'
-# filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_38_36.523_mef.fits'
+filepath = '/Users/emma/projects/llamas-data/ATLASJ1013/LLAMAS_2024-11-30T08_38_36.523_mef.fits'
 aper = [[23.72, 23.65], [23.72, 23.65], [23.72, 23.65]]
 objname = 'J1013'
 
 # filepath = '/Users/emma/projects/llamas-data/ATLASJ1138/LLAMAS_2024-11-28T07_41_00.294_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T07_28_04.077_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_14_04.831_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T07_33_22.414_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_15_55.637_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T07_37_34.271_mef.fits' 
+# filepath = 'LLAMAS_2024-11-28T08_17_43.986_mef.fits'
+
+# filepath = 'LLAMAS_2024-11-28T07_41_00.294_mef.fits'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1138/LLAMAS_2024-11-28T07_44_37.410_mef.fits' # no good
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1138/LLAMAS_2024-11-28T08_22_25.627_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T07_48_34.617_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_24_16.113_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T07_52_12.224_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_26_04.934_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T07_55_31.391_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_27_52.788_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T07_58_50.070_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_29_41.401_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_02_07.417_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_31_31.575_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_05_28.578_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_33_33.961_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_08_31.973_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_35_23.426_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_10_23.423_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_37_14.576_mef.fits'
+# filepath = 'LLAMAS_2024-11-28T08_12_16.713_mef.fits'
+# filepath = '/Users/emma/projects/llamas-data/ATLASJ1138/LLAMAS_2024-11-28T08_39_07.264_mef.fits'
 # aper = [[11.27, 19.1], [11.75, 20], [11.27, 20.87]]
 # objname = 'J1138'
 
@@ -26,7 +59,7 @@ objname = 'J1013'
 choose_brightest = False
 
 
-out_dir = '/Users/emma/Desktop/work/250414/'
+
 out_dir +=objname+'_'
 
 # -----------------------------------------------------------------------------
@@ -41,14 +74,14 @@ from llamas_pyjamas.config import BASE_DIR, OUTPUT_DIR
 sys.path.append(BASE_DIR+'/')
 
 from LLAMAS_UTILS.pyjamas_utils import plot_whitelight, run_extract, \
-    extract_sky, extract_aper, extract_fiber, get_fiber, fluxcal, wavecal
+    extract_aper, fluxcal, get_brightest_pix, plot_fiber_intensity_map
 from astropy.io import fits
 
 from scipy.stats import binned_statistic
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 plt.rcParams['font.family'] = 'serif'
-# plt.ion()
+plt.ion()
 
 
 package_path = pkg_resources.resource_filename('llamas_pyjamas', '')
@@ -56,6 +89,7 @@ print(f"Package path: {package_path}")
 
 ext = filepath.split('/')[-1][:-8]
 LUT = package_path+'/Image/LLAMAS_FiberMap_revA.dat' # look up table
+# LUT = package_path+'/LUT/LLAMAS_FiberMap_rev02.dat'
 extract_pickle = OUTPUT_DIR+'/'+ext+'extract.pkl'
 white_fits = OUTPUT_DIR+'/'+ext+'mef_whitelight.fits'
 
@@ -63,8 +97,8 @@ colors = ['red', 'green', 'blue']
 
 # -- extraction ---------------------------------------------------------------
 
-if not os.path.exists(extract_pickle): 
-    run_extract(filepath)
+# if not os.path.exists(extract_pickle): 
+run_extract(filepath)
     
 with open(extract_pickle, 'rb') as f:
     exobj = pickle.load(f)
@@ -74,46 +108,16 @@ with open(extract_pickle, 'rb') as f:
 # Plot white light image
 whitelight = fits.open(white_fits)
 if choose_brightest:
-    aper = get_fiber(whitelight)
+    aper = get_brightest_pix(whitelight)
 plot_whitelight(whitelight, aper)
 plt.savefig(out_dir+ext+'_whitelight.png', dpi=300)
-
-# # Get spectra
-# waves, spectra = extract_fiber(exobj, LUT, aper)
-# waves_sky, sky = extract_fiber(exobj, LUT, skyaper)
-
-# fig, ax = plt.subplots(nrows=3, figsize=(12,7))
-# for i in range(3):
-#     ax[i].plot(waves[i], spectra[i], color=colors[i], label='Raw science',
-#                 alpha=0.5)
-#     ax[i].plot(waves_sky[i], sky[i], '-k', label='Sky')
-#     # ax[i].plot(spectra[i], color=colors[i], label='Raw science',
-#     #             alpha=0.5)
-#     # ax[i].plot(sky[i], '-k', label='Sky')    
-    
-#     # Interpolate sky spectrum to match science wavelength grid
-#     interp_sky = interp1d(waves_sky[i], sky[i], kind='linear', bounds_error=False,
-#                           fill_value='extrapolate')
-
-#     spectra[i] = spectra[i] - interp_sky(waves[i])
-    
-#     ax[i].plot(waves[i], spectra[i], alpha=0.8,
-#                 color='m', label='Sky-subtracted science')
-#     ax[i].set_xlabel('Wavelength (Å)')
-    
-    
-#     # spectra[i] = spectra[i] - sky[i]
-#     # ax[i].plot(spectra[i], alpha=0.8, ls='-.',
-#     #             color='m', label='Sky-subtracted science')
-#     # ax[i].set_xlabel('Pixel')
-    
-#     ax[i].set_ylabel('Counts')
-#     ax[i].legend()
-
-waves, sky = extract_sky(exobj, LUT, aper, out_dir+ext)
+plot_fiber_intensity_map(exobj, LUT, aper, out_dir+ext)
 
 # Get sky-subtracted spectra
-spectra = extract_aper(exobj, LUT, aper, waves, sky, out_dir+ext) 
+# waves, spectra = extract_aper(exobj, LUT, aper, out_dir+ext) 
+
+from LLAMAS_UTILS.pyjamas_utils import extract_fiber
+waves, spectra = extract_fiber(exobj, LUT, aper) 
 
 # Estimate wavelength calibration
 # waves = wavecal()
@@ -180,4 +184,3 @@ ax_cal.set_ylabel(r'Flux (erg cm$^{-2}$ s$^{-1}$ Å$^{-1}$ $\times$ 10$^{16}$)')
 fig_cal.tight_layout()
 fig_cal.savefig(out_dir+ext+'_fluxcal.png', dpi=300)
 
-plt.show()
