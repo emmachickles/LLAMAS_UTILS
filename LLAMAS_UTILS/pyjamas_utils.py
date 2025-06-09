@@ -1281,3 +1281,414 @@ def extract_bjd_from_filename(filepath, ra_deg=153.42697, dec_deg=-45.28243, obs
     delta = t.light_travel_time(target, kind='barycentric', location=observatory)
     t = t + delta
     return t.mjd
+
+def extract_all_spectra_and_bjd(filepaths, fibermap, arc, x, y, ra_deg=153.42697, dec_deg=-45.28243, observatory_name='Las Campanas Observatory'):
+    """
+    For a list of _mef.fits filepaths, extract sky-subtracted spectra and BJD.
+
+    Returns:
+        skysub_spectra_list: list of dicts (one per file, keys: 'r', 'g', 'b')
+        bjd_list: list of BJD values
+    """
+    import pickle
+    import os
+    from astropy.time import Time
+    from astropy.coordinates import EarthLocation, SkyCoord
+    import re
+    from llamas_pyjamas.config import OUTPUT_DIR
+
+    skysub_spectra_list = []
+    bjd_list = []
+
+    for filepath in filepaths:
+        ext = os.path.basename(filepath)[:-8]
+        extract_pickle = os.path.join(OUTPUT_DIR, ext + 'extract.pkl')
+
+        with open(extract_pickle, 'rb') as f:
+            exobj = pickle.load(f)
+
+        # Extract spectra
+        spec = extract_aper(exobj, fibermap, arc, x, y)
+        spec_sky = extract_sky(exobj, fibermap, arc, x, y, spec)
+        spec_skysub = sky_subtraction(spec, spec_sky)
+        skysub_spectra_list.append(spec_skysub)
+
+        # Extract BJD from filename
+        match = re.search(r'(\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}\.\d+)', ext)
+        if not match:
+            raise ValueError(f"No timestamp found in filename: {filepath}")
+        timestamp = match.group(1).replace('_', ':')
+        t = Time(timestamp, format='isot', scale='utc')
+        t = t.tdb
+        observatory = EarthLocation.of_site(observatory_name)
+        target = SkyCoord(ra_deg, dec_deg, unit="deg")
+        delta = t.light_travel_time(target, kind='barycentric', location=observatory)
+        t = t + delta
+        bjd_list.append(t.mjd)
+
+        # Apply heliocentric correction to each color channel
+        for color in ['r', 'g', 'b']:
+            wave = spec_skysub[color]['wave']
+            # Use the observation time in ISO format
+            obs_time = t.isot
+            corrected_wave, v_helio_kms = apply_heliocentric_correction(
+            wave, ra_deg, dec_deg, obs_time, observatory=observatory_name
+            )
+            spec_skysub[color]['wave'] = corrected_wave
+            spec_skysub[color]['v_helio_kms'] = v_helio_kms
+
+    return skysub_spectra_list, np.array(bjd_list)
+
+def plot_skysub_spectra_by_color(skysub_spectra_list, bjd_list, out_dir=None, ext=''):
+    """
+    Plot sky-subtracted spectra for each color channel, with each spectrum labeled by BJD.
+    Each figure corresponds to one color channel, arranged in at most 5 rows and as many columns as needed.
+
+    Parameters
+    ----------
+    skysub_spectra_list : list of dicts
+        Output from extract_skysub_spectra_and_bjd (list of spec_skysub dicts).
+    bjd_list : array-like
+        List or array of BJD values, same order as skysub_spectra_list.
+    out_dir : str or None
+        If provided, save the plot to this directory.
+    ext : str
+        Optional string to append to the filename.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import math
+
+    colors = ['r', 'g', 'b']
+    color_names = {'r': 'Red', 'g': 'Green', 'b': 'Blue'}
+
+    for color in colors:
+        n_spec = len(skysub_spectra_list)
+        nrows = min(5, n_spec)
+        ncols = math.ceil(n_spec / nrows)
+        fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(4 * ncols, 2.2 * nrows), sharex=True)
+        axes = axes.flatten() if n_spec > 1 else [axes]
+        for i, (spec, bjd) in enumerate(zip(skysub_spectra_list, bjd_list)):
+            wave = spec[color]['wave']
+            flux = spec[color]['spectrum']
+
+            if 'mask' in spec[color]:
+                mask = spec[color]['mask']
+                wave = wave[mask]
+                flux = flux[mask]            
+
+            # Bin to 512 bins before plotting
+            # winned, flux_binned = bin_spectrum(wave, flux, 512)
+            axes[i].plot(wave, flux, label=f'BJD={bjd:.5f}', color=color)
+            axes[i].legend(fontsize=8, loc='best')
+            axes[i].set_ylabel('Counts')
+        axes[0].set_title(f'{color_names[color]} Channel')
+        axes[-1].set_xlabel('Wavelength (Å)')
+        # Hide unused axes
+        for j in range(i + 1, len(axes)):
+            axes[j].set_visible(False)
+        plt.tight_layout()
+        if out_dir is not None:
+            plt.savefig(f"{out_dir}{ext}skysub_spectra_{color}.png", dpi=300)
+        plt.show()
+
+def plot_trailed_spectrum_from_skysub(
+    skysub_spectra_list, bjd_list, color, line_center, period, t0, window=20, out_path=None, label=None
+):
+    """
+    Plot a trailed spectrum for a given color channel using sky-subtracted spectra.
+
+    Parameters
+    ----------
+    skysub_spectra_list : list of dicts
+        Output from extract_skysub_spectra_and_bjd (list of spec_skysub dicts).
+    bjd_list : array-like
+        List or array of BJD values, same order as skysub_spectra_list.
+    color : str
+        Color channel to use ('r', 'g', or 'b').
+    line_center : float
+        Central wavelength (Angstroms) for the line.
+    period : float
+        Orbital period (days).
+    t0 : float
+        Reference time (days).
+    window : float
+        Half-width of the window (Angstroms) to cut around line_center.
+    out_path : str or None
+        If given, save the plot to this path.
+    label : str or None
+        Optional label for the plot title.
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from scipy.interpolate import interp1d
+
+    # Gather wavelength and flux arrays for the chosen color
+    wave_arr = [spec[color]['wave'] for spec in skysub_spectra_list]
+    flux_arr = [spec[color]['spectrum'] for spec in skysub_spectra_list]
+    BJD = np.array(bjd_list)
+
+    phi = ((BJD - t0) / period) % 1
+
+    # Interpolate all spectra onto a common wavelength grid centered on line_center
+    # wave_template = wave_arr[0]
+    # mask = (wave_template > line_center - window) & (wave_template < line_center + window)
+    # wave_cut = wave_template[mask]
+
+    wave_cut = np.linspace(line_center - window, line_center + window, 20)
+
+
+    flux_interp = []
+    for w, f in zip(wave_arr, flux_arr):
+        interp_flux = interp1d(w, f, kind='linear', fill_value=np.nan, bounds_error=False)(wave_cut)
+        flux_interp.append(interp_flux)
+    flux_interp = np.array(flux_interp)
+
+    # Compute radial velocity axis
+    c = 2.99792458e5
+    rv = ((wave_cut - line_center) / line_center) * c
+
+    # Extend phase and flux for wraparound plotting
+    phi_extended = np.concatenate([phi - 1, phi])
+    flux_extended = np.concatenate([flux_interp, flux_interp], axis=0)
+
+    plt.figure(figsize=(6, 3))
+    plt.imshow(flux_extended.T, aspect='auto', cmap='inferno',
+               extent=[phi_extended.min(), phi_extended.max(), rv.min(), rv.max()],
+               origin='lower', interpolation='none')
+    plt.colorbar(label='Flux')
+    plt.xlabel('Orbital Phase')
+    plt.ylabel('Radial Velocity (km/s)')
+    title = f'Trailed Spectrum {label or f"{line_center:.1f} Å"}'
+    plt.title(title)
+    plt.xticks(ticks=np.linspace(-1, 1, 9))
+    plt.tight_layout()
+    if out_path:
+        plt.savefig(out_path, dpi=300)
+    plt.show()
+
+def plot_line_window_from_skysub(
+    skysub_spectra_list, bjd_list, color, line_center, t0, period, window=75, out_path=None, label=None
+):
+    """
+    Plot a window around a provided line for all sky-subtracted spectra in a given color channel,
+    arranging the plots in at most 5 rows and as many columns as needed.
+
+    Parameters
+    ----------
+    skysub_spectra_list : list of dicts
+        Output from extract_skysub_spectra_and_bjd (list of spec_skysub dicts).
+    bjd_list : array-like
+        List or array of BJD values, same order as skysub_spectra_list.
+    color : str
+        Color channel to use ('r', 'g', or 'b').
+    line_center : float
+        Central wavelength (Angstroms) for the line (e.g., 4686 for He II).
+    t0 : float
+        Reference time (days).
+    period : float
+        Orbital period (days).
+    window : float
+        Half-width of the window (Angstroms) to cut around line_center.
+    out_path : str or None
+        If given, save the plot to this path.
+    label : str or None
+        Optional label for the plot title.
+    """
+    import matplotlib.pyplot as plt
+    import math
+    import numpy as np
+
+    n_spec = len(skysub_spectra_list)
+    nrows = min(5, n_spec)
+    ncols = math.ceil(n_spec / nrows)
+
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(3 * ncols, 2.2 * nrows), sharex=True)
+    axes = axes.flatten() if n_spec > 1 else [axes]
+
+    for i, (spec, bjd) in enumerate(zip(skysub_spectra_list, bjd_list)):
+        wave = spec[color]['wave']
+        flux = spec[color]['spectrum']
+        mask = (wave > line_center - window) & (wave < line_center + window)
+        phase = ((bjd - t0) / period) % 1
+        axes[i].plot(wave[mask], flux[mask], label=f'BJD={bjd:.5f}, ϕ={phase:.2f}')
+        axes[i].axvline(line_center, color='r', linestyle='--', alpha=0.5, label='Line Center' if i == 0 else None)
+        axes[i].legend(fontsize=8, loc='best')
+        axes[i].set_ylabel('Counts')
+    axes[0].set_title(f'{label or f"Line {line_center:.1f} Å"} ({color} channel)')
+    axes[-1].set_xlabel('Wavelength (Å)')
+
+    # Hide unused axes
+    for j in range(i + 1, len(axes)):
+        axes[j].set_visible(False)
+
+    plt.tight_layout()
+    if out_path:
+        plt.savefig(out_path, dpi=300)
+    plt.show()
+
+def bin_spectrum(wave, counts, nbins):
+    """
+    Bin the spectrum from its original wavelength bins to nbins.
+    Returns the binned wavelength (center of bins) and binned counts (sum in each bin).
+    """
+
+    # Ensure arrays are numpy arrays
+    wave = np.asarray(wave)
+    counts = np.asarray(counts)
+
+    # Define bin edges
+    bin_edges = np.linspace(wave.min(), wave.max(), nbins + 1)
+    # Bin centers
+    bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+
+    # Digitize wave to bins
+    inds = np.digitize(wave, bin_edges) - 1
+    # Clip indices to valid range
+    inds = np.clip(inds, 0, nbins - 1)
+
+    # Sum counts in each bin
+    binned_counts = np.zeros(nbins)
+    for i in range(nbins):
+        mask = inds == i
+        if np.any(mask):
+            binned_counts[i] = np.nansum(counts[mask])
+        else:
+            binned_counts[i] = np.nan
+
+    return bin_centers, binned_counts
+
+def coadd_skysub_spectra(spec_skysub_list, color='g'):    
+    """
+    Coadd a list of sky-subtracted spectra (spec_skysub dicts) for a given color channel.
+    All spectra are interpolated onto the wavelength grid of the first spectrum.
+
+    Parameters
+    ----------
+    spec_skysub_list : list of dict
+        Each dict is a sky-subtracted spectrum (output from sky_subtraction).
+    color : str
+        Color channel to coadd ('r', 'g', or 'b').
+
+    Returns
+    -------
+    wave : ndarray
+        Common wavelength grid (from the first spectrum).
+    coadd_flux : ndarray
+        Coadded flux array.
+    """
+
+    import numpy as np
+    from scipy.interpolate import interp1d    
+
+    if not spec_skysub_list:
+        raise ValueError("Input list is empty.")
+
+    # Use the wavelength grid of the first spectrum as the reference
+    wave_ref = spec_skysub_list[0][color]['wave']
+    fluxes_interp = []
+
+    for spec in spec_skysub_list:
+        wave = spec[color]['wave']
+        flux = spec[color]['spectrum']
+        # Apply mask if present
+        if 'mask' in spec[color]:
+            mask = spec[color]['mask']
+            wave = wave[mask]
+            flux = flux[mask]
+        interp_flux = interp1d(wave, flux, kind='linear', bounds_error=False, fill_value=np.nan)(wave_ref)
+        fluxes_interp.append(interp_flux)
+
+    fluxes_interp = np.array(fluxes_interp)
+    # Coadd using nanmean to ignore missing values
+    coadd_flux = np.nanmean(fluxes_interp, axis=0)
+
+    return wave_ref, coadd_flux
+
+def coadd_all_colors(spec_skysub_list):
+    """
+    Coadd a list of sky-subtracted spectra for all three color channels.
+
+    Parameters
+    ----------
+    spec_skysub_list : list of dict
+        Each dict is a sky-subtracted spectrum (output from sky_subtraction).
+
+    Returns
+    -------
+    coadd_results : dict
+        Dictionary with keys 'r', 'g', 'b', each containing a tuple (wave, coadd_flux).
+    """
+    coadd_results = {}
+    for color in ['r', 'g', 'b']:
+        wave, coadd_flux = coadd_skysub_spectra(spec_skysub_list, color=color)
+        coadd_results[color] = (wave, coadd_flux)
+    return coadd_results
+
+def plot_coadd_spectra_by_color(coadd_results, out_dir=None, label=None):
+    """
+    Plot the coadded spectra for all three color channels.
+
+    Parameters
+    ----------
+    coadd_results : dict
+        Dictionary with keys 'r', 'g', 'b', each containing a tuple (wave, coadd_flux).
+    out_dir : str or None
+        If provided, save the plots to this directory.
+    label : str or None
+        Optional label for the plot title.
+    """
+    import matplotlib.pyplot as plt
+
+    color_map = {'r': 'red', 'g': 'green', 'b': 'blue'}
+    for color in ['r', 'g', 'b']:
+        wave, coadd_flux = coadd_results[color]
+        plt.figure(figsize=(10, 4))
+        plt.plot(wave, coadd_flux, color=color_map[color], label=label or f'Coadded {color} spectrum')
+        plt.xlabel('Wavelength (Å)')
+        plt.ylabel('Flux')
+        plt.title(label or f'Coadded Spectrum ({color} channel)')
+        plt.legend()
+        plt.tight_layout()
+        if out_dir:
+            plt.savefig(f"{out_dir}coadd_{color}.png", dpi=300)
+        plt.show()
+
+def apply_heliocentric_correction(wavelength, ra, dec, obs_time, observatory='paranal'):
+    """
+    Apply heliocentric velocity correction to observed wavelengths.
+
+    Parameters
+    ----------
+    wavelength : array-like
+        Observed wavelengths (in Angstroms).
+    ra : float
+        Right ascension in degrees.
+    dec : float
+        Declination in degrees.
+    obs_time : str or astropy.time.Time
+        Observation time (ISO string or astropy Time object).
+    observatory : str
+        Observatory name for astropy EarthLocation.
+
+    Returns
+    -------
+    corrected_wavelength : ndarray
+        Heliocentric-corrected wavelengths (in Angstroms).
+    v_helio_kms : float
+        Heliocentric velocity correction (in km/s).
+    """
+    import astropy.units as u
+    from astropy.coordinates import SkyCoord, EarthLocation
+    from astropy.time import Time
+    from astropy.constants import c
+    import numpy as np    
+
+    if not isinstance(obs_time, Time):
+        obs_time = Time(obs_time, format='isot', scale='utc')
+    location = EarthLocation.of_site(observatory)
+    target = SkyCoord(ra=ra*u.deg, dec=dec*u.deg)
+    v_helio = target.radial_velocity_correction(obstime=obs_time, location=location)
+    v_helio_kms = v_helio.to(u.km/u.s).value
+    corrected_wavelength = np.asarray(wavelength) * (1 + v_helio_kms / c.to('km/s').value)
+    return corrected_wavelength, v_helio_kms
